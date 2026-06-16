@@ -13,6 +13,7 @@ mod screen;
 mod settings;
 mod state;
 mod tray;
+mod update;
 
 use std::sync::Mutex;
 
@@ -31,6 +32,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -86,6 +89,10 @@ pub fn run() {
             if !auth::is_pin_configured() {
                 commands::open_first_run_window(&handle);
             }
+
+            // Quietly check for updates on launch (release builds only).
+            #[cfg(not(debug_assertions))]
+            update::check(&handle, true);
 
             Ok(())
         })

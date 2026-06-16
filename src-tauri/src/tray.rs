@@ -26,12 +26,15 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let resume = MenuItem::with_id(app, "resume", "Resume", false, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let updates = MenuItem::with_id(app, "updates", "Check for updates…", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Veil", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
-        &[&status, &lock, &resume, &sep1, &settings, &sep2, &quit],
+        &[
+            &status, &lock, &resume, &sep1, &settings, &updates, &sep2, &quit,
+        ],
     )?;
 
     app.manage(TrayItems {
@@ -58,6 +61,7 @@ fn on_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         // Resume is only enabled in Frozen, so a plain transition is safe.
         "resume" if state::current(app) == State::Frozen => state::transition(app, State::Idle),
         "settings" => crate::commands::open_settings_window_impl(app),
+        "updates" => crate::update::check(app, false),
         "quit" => app.exit(0),
         _ => {}
     }

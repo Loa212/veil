@@ -56,6 +56,10 @@ implementation plan and phase order.
 - [src-tauri/src/screen.rs](src-tauri/src/screen.rs) — observes
   `com.apple.screenIsUnlocked` to auto-clear `Frozen → Idle` after the user logs
   back into macOS.
+- [src-tauri/src/update.rs](src-tauri/src/update.rs) — in-app auto-update
+  (tauri-plugin-updater): on-launch check + tray "Check for updates…"; the update
+  host is GitHub Releases (`latest.json`), no server. See
+  [DISTRIBUTION.md](DISTRIBUTION.md).
 - [src/main.tsx](src/main.tsx) — picks the view per window
   (overlay / settings / first-run) via [src/lib/window.ts](src/lib/window.ts).
 - [src/lib/commands.ts](src/lib/commands.ts) + [src/lib/ipc.ts](src/lib/ipc.ts)
