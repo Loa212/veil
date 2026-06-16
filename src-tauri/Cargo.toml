@@ -38,9 +38,11 @@ objc2-app-kit = { version = "0.3", features = [
 ] }
 objc2-foundation = { version = "0.3", features = [
   "NSNotification",
+  "NSOperation",
   "NSString",
   "NSGeometry",
   "NSArray",
+  "block2",
 ] }
 objc2-local-authentication = { version = "0.3", features = [
   "LAContext",
