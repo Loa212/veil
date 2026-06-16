@@ -42,3 +42,10 @@ next-env.d.ts
 # for TODO tracking
 /TODOS.md
 .tmp/
+
+# build output
+/dist
+
+# rust / tauri
+/src-tauri/target
+/src-tauri/gen

@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Reference project
+.tmp/
+
+# Claude Code config and skills (not project source)
+.claude/
+
+# Config files that should keep their formatting
+*.config.js
+*.config.ts
+vite.config.ts
+
+# Lockfiles
+bun.lock
+package-lock.json
+
+# Logs
+*.log

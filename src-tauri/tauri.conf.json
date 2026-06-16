@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Veil",
+  "version": "0.1.0",
+  "identifier": "com.veil.app",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["$APPDATA/**", "$HOME/**"],
+          "requireLiteralLeadingDot": false
+        }
+      }
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Utility",
+    "shortDescription": "A macOS soft lockscreen.",
+    "longDescription": "Veil drops a fullscreen overlay the instant the app loses focus, prompts for Touch ID or a custom PIN, and falls back to the native macOS lock screen.",
+    "copyright": "Copyright © 2026. All rights reserved.",
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "15.0",
+      "signingIdentity": null,
+      "entitlements": null,
+      "exceptionDomain": ""
+    }
+  }
+}

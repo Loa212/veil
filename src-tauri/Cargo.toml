@@ -1,0 +1,71 @@
+[package]
+name = "veil"
+version = "0.1.0"
+description = "Veil — a macOS soft lockscreen overlay."
+authors = ["loa212"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix keeps the lib name distinct from the bin name (needed on
+# Windows, see rust-lang/cargo#8519).
+name = "veil_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset", "tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+argon2 = "0.5"
+rand = "0.8"
+dirs = "5.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = [
+  "NSWindow",
+  "NSResponder",
+  "NSScreen",
+  "NSApplication",
+  "NSEvent",
+] }
+objc2-foundation = { version = "0.3", features = [
+  "NSNotification",
+  "NSString",
+  "NSGeometry",
+  "NSArray",
+] }
+objc2-local-authentication = { version = "0.3", features = [
+  "LAContext",
+  "LAError",
+] }
+block2 = "0.6"
+security-framework = "3"
+
+[dev-dependencies]
+tempfile = "3"
+
+# Optimize for smaller binary size in release builds.
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+# Fast local release profile — for testing release builds without
+# distribution-grade size optimization. Use via: bun run tauri:build:fast
+[profile.release-fast]
+inherits = "release"
+codegen-units = 16
+lto = "thin"
+opt-level = 2
+strip = "debuginfo"
+incremental = true
