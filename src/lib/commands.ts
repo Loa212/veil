@@ -17,17 +17,17 @@ export const resume = () => invokeVoid('resume')
 export const authenticateTouchId = () =>
   invoke<AuthOutcome>('authenticate_touchid')
 export const verifyPin = (pin: string) => invoke<boolean>('verify_pin', { pin })
-export const verifyRecovery = (code: string) =>
-  invoke<boolean>('verify_recovery', { code })
-export const authFailed = () => invokeVoid('auth_failed')
+/** Deliberately drop to the macOS lock screen (the fallback). */
+export const fallbackToMacLock = () => invokeVoid('auth_failed')
 
-// ── PIN / recovery setup ─────────────────────────────────────────────────────
+// ── PIN setup ────────────────────────────────────────────────────────────────
 export const isPinConfigured = () => invoke<boolean>('is_pin_configured')
 export const setupPin = (pin: string) => invokeVoid('setup_pin', { pin })
-export const changePin = (currentPin: string, newPin: string) =>
-  invoke<boolean>('change_pin', { currentPin, newPin })
-export const generateRecovery = () => invoke<string>('generate_recovery')
-export const regenerateRecovery = () => invoke<string>('regenerate_recovery')
+/** Change the PIN; authorize with the current PIN and/or a prior Touch ID. */
+export const changePin = (
+  newPin: string,
+  opts: { currentPin?: string; touchIdOk?: boolean }
+) => invoke<boolean>('change_pin', { newPin, ...opts })
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export const loadSettings = () => invoke<Settings>('load_settings')

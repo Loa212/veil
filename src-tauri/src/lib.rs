@@ -9,7 +9,6 @@ mod keychain;
 mod lock;
 mod overlay;
 mod power;
-mod recovery;
 mod screen;
 mod settings;
 mod state;
@@ -92,13 +91,10 @@ pub fn run() {
             commands::resume,
             commands::authenticate_touchid,
             commands::verify_pin,
-            commands::verify_recovery,
             commands::auth_failed,
             commands::is_pin_configured,
             commands::setup_pin,
             commands::change_pin,
-            commands::generate_recovery,
-            commands::regenerate_recovery,
             commands::load_settings,
             commands::save_settings,
             commands::pick_background,

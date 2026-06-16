@@ -2,10 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { PinPad } from './PinPad'
 import {
-  authFailed,
   authenticateTouchId,
+  fallbackToMacLock,
   verifyPin,
-  verifyRecovery,
 } from '@/lib/commands'
 
 /**
@@ -31,8 +30,6 @@ async function tryTouchId() {
 const PIN_LENGTH = 4
 const MAX_ATTEMPTS = 3
 
-type Mode = 'pin' | 'recovery'
-
 interface AuthPromptProps {
   /** Only the primary display auto-fires Touch ID and shows the full prompt. */
   isPrimary: boolean
@@ -42,18 +39,15 @@ interface AuthPromptProps {
 
 /**
  * Auth prompt shown when the overlay is interacted with. Touch ID auto-fires on
- * the primary display; PIN is the fallback; a recovery-code path is available.
- * Too many failures (or recovery exhaustion) triggers the native lock + Frozen
- * via `auth_failed()`.
+ * the primary display; PIN is the fallback. Too many failures (or the explicit
+ * "macOS lock screen" link) drops to the native macOS lock via `auth_failed()`.
  */
 export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
-  const [mode, setMode] = useState<Mode>('pin')
   const [pin, setPin] = useState(
     initialDigit && initialDigit >= '0' && initialDigit <= '9'
       ? initialDigit
       : ''
   )
-  const [recovery, setRecovery] = useState('')
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
   const [attempts, setAttempts] = useState(0)
@@ -67,10 +61,6 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
     void tryTouchId()
   }, [isPrimary])
 
-  const fail = useCallback(() => {
-    void authFailed()
-  }, [])
-
   const submitPin = useCallback(
     async (value: string) => {
       setBusy(true)
@@ -81,10 +71,10 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
       setAttempts(next)
       setError(true)
       setPin('')
-      if (next >= MAX_ATTEMPTS) fail()
+      if (next >= MAX_ATTEMPTS) void fallbackToMacLock()
       else setTimeout(() => setError(false), 600)
     },
-    [attempts, fail]
+    [attempts]
   )
 
   const onDigit = useCallback(
@@ -104,65 +94,13 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
 
   // Physical-keyboard support for the PIN pad.
   useEffect(() => {
-    if (mode !== 'pin') return
     const onKey = (e: KeyboardEvent) => {
       if (e.key >= '0' && e.key <= '9') onDigit(e.key)
       else if (e.key === 'Backspace') onDelete()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [mode, onDigit, onDelete])
-
-  const submitRecovery = useCallback(async () => {
-    setBusy(true)
-    const ok = await verifyRecovery(recovery).catch(() => false)
-    setBusy(false)
-    if (ok) return
-    const next = attempts + 1
-    setAttempts(next)
-    setError(true)
-    setRecovery('')
-    if (next >= MAX_ATTEMPTS) fail()
-    else setTimeout(() => setError(false), 600)
-  }, [recovery, attempts, fail])
-
-  if (mode === 'recovery') {
-    return (
-      <div
-        className={`flex flex-col items-center gap-5 ${error ? 'veil-shake' : ''}`}
-      >
-        <p className="text-sm text-white/70">Enter your recovery code</p>
-        <input
-          autoFocus
-          value={recovery}
-          disabled={busy}
-          onChange={e => {
-            setError(false)
-            setRecovery(e.target.value)
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Enter') void submitRecovery()
-          }}
-          placeholder="XXXX-XXXX-XXXX-XXXX"
-          className={`w-72 rounded-md border bg-white/5 px-4 py-2 text-center font-mono tracking-widest text-white placeholder:text-white/30 focus:outline-none ${
-            error ? 'border-red-500 text-red-300' : 'border-white/30'
-          }`}
-        />
-        <div className="flex gap-4 text-xs text-white/50">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('pin')
-              setError(false)
-            }}
-            className="hover:text-white/80"
-          >
-            ← back to PIN
-          </button>
-        </div>
-      </div>
-    )
-  }
+  }, [onDigit, onDelete])
 
   return (
     <div className="flex flex-col items-center gap-7">
@@ -186,13 +124,10 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
         )}
         <button
           type="button"
-          onClick={() => {
-            setMode('recovery')
-            setError(false)
-          }}
+          onClick={() => void fallbackToMacLock()}
           className="hover:text-white/80"
         >
-          Use recovery code
+          macOS lock screen
         </button>
       </div>
     </div>

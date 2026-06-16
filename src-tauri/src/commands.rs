@@ -61,15 +61,6 @@ pub fn verify_pin(app: AppHandle, pin: String) -> bool {
     ok
 }
 
-#[tauri::command]
-pub fn verify_recovery(app: AppHandle, code: String) -> bool {
-    let ok = crate::auth::verify_recovery(&code);
-    if ok {
-        unlock(&app);
-    }
-    ok
-}
-
 /// Successful auth from the overlay: tear it down and go Idle (no re-arm).
 fn unlock(app: &AppHandle) {
     let current = state::current(app);
@@ -88,7 +79,7 @@ pub fn auth_failed(app: AppHandle) {
     state::transition(&app, State::Frozen);
 }
 
-// ── PIN / recovery setup ──────────────────────────────────────────────────────
+// ── PIN setup ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn is_pin_configured() -> bool {
@@ -102,28 +93,27 @@ pub fn setup_pin(pin: String) -> Result<(), String> {
     crate::auth::set_pin(&pin)
 }
 
-/// Settings: change the PIN (requires the current PIN to authorize).
+/// Settings: change the PIN. Authorized by the current PIN OR Touch ID — the
+/// frontend runs Touch ID and passes `touchIdOk: true` if it succeeded.
 #[tauri::command]
-pub fn change_pin(current_pin: String, new_pin: String) -> Result<bool, String> {
-    if !crate::auth::verify_pin(&current_pin) {
+pub fn change_pin(
+    app: AppHandle,
+    new_pin: String,
+    current_pin: Option<String>,
+    touch_id_ok: Option<bool>,
+) -> Result<bool, String> {
+    let _ = &app;
+    let authorized = touch_id_ok.unwrap_or(false)
+        || current_pin
+            .as_deref()
+            .map(crate::auth::verify_pin)
+            .unwrap_or(false);
+    if !authorized {
         return Ok(false);
     }
     validate_pin(&new_pin)?;
     crate::auth::set_pin(&new_pin)?;
     Ok(true)
-}
-
-/// First-run: generate, store (hashed), and return a fresh recovery code (shown
-/// once). Same impl as `regenerate_recovery` — kept distinct for call-site clarity.
-#[tauri::command]
-pub fn generate_recovery() -> Result<String, String> {
-    crate::auth::set_new_recovery()
-}
-
-/// Settings: regenerate the recovery code, replacing the old one.
-#[tauri::command]
-pub fn regenerate_recovery() -> Result<String, String> {
-    crate::auth::set_new_recovery()
 }
 
 fn validate_pin(pin: &str) -> Result<(), String> {

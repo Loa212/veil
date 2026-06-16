@@ -2,10 +2,12 @@
 
 A macOS "soft lockscreen": a menubar (accessory) app. On an explicit user action
 (menubar "Lock now" or the Cmd+Ctrl+L global hotkey) it drops a fullscreen
-overlay across every display and prompts for Touch ID / PIN / recovery code. On a
+overlay across every display and prompts for Touch ID or a PIN. On a
 successful unlock it returns to Idle (it does NOT re-lock on focus loss); on
-repeated auth failure it triggers the native macOS lock and freezes. Tauri 2.x
-(Rust core) + React 19 + TS + Vite. State machine: `Idle | Presenting | Frozen`.
+repeated auth failure (or the explicit "macOS lock screen" link) it triggers the
+native macOS lock and freezes. There is no recovery code — the macOS lock is the
+fallback (forgot PIN → fail auth → log into the Mac → change PIN in Settings).
+Tauri 2.x (Rust core) + React 19 + TS + Vite. State: `Idle | Presenting | Frozen`.
 
 The build is structured in phases — see [PLAN.md](PLAN.md) for the spec and
 `~/.claude/plans/we-need-to-implement-eventual-lightning.md` for the
@@ -46,8 +48,9 @@ implementation plan and phase order.
   screen-saver window level + activate the app via the raw `NSWindow` handle
   (`nswindow.rs`) so all displays cover at once.
 - [src-tauri/src/auth/](src-tauri/src/auth/) — Touch ID (`touchid.rs`, dispatched
-  on the main thread) + argon2 PIN/recovery hashing (`pin.rs`). The global lock
-  hotkey is registered in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
+  on the main thread) + argon2 PIN hashing (`pin.rs`); PIN hash lives in the
+  Keychain ([src-tauri/src/keychain.rs](src-tauri/src/keychain.rs)). The global
+  lock hotkey is registered in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 - [src-tauri/src/lock.rs](src-tauri/src/lock.rs) — native lock via the private
   `SACLockScreenImmediate` (login.framework, dlopen/dlsym) — no permission.
 - [src-tauri/src/screen.rs](src-tauri/src/screen.rs) — observes

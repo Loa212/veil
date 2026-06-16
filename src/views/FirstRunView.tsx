@@ -1,30 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { RecoveryCodeDisplay } from '@/components/RecoveryCodeDisplay'
-import { generateRecovery, setupPin } from '@/lib/commands'
-
-type Step = 'pin' | 'recovery'
+import { setupPin } from '@/lib/commands'
 
 const PIN_MIN = 4
 
 /**
- * First-run setup: choose a PIN, then save a one-time recovery code. Closing the
- * window after this leaves Veil idle in the menubar, ready to lock.
+ * First-run setup: choose a PIN. That's it — there's no recovery code; if the
+ * PIN is forgotten, the macOS lock screen is the fallback (fail auth → macOS
+ * lock → log into the Mac → change the PIN in Settings). Closing the window
+ * leaves Veil idle in the menubar, ready to lock.
  */
 export function FirstRunView() {
-  const [step, setStep] = useState<Step>('pin')
   const [pin, setPin] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [recovery, setRecovery] = useState('')
   const pinRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (step === 'pin') pinRef.current?.focus()
-  }, [step])
+    pinRef.current?.focus()
+  }, [])
 
-  const submitPin = async () => {
+  const submit = async () => {
     if (pin.length < PIN_MIN || !/^\d+$/.test(pin)) {
       setError(`PIN must be at least ${PIN_MIN} digits.`)
       return
@@ -37,47 +34,11 @@ export function FirstRunView() {
     setError(null)
     try {
       await setupPin(pin)
-      const code = await generateRecovery()
-      setRecovery(code)
-      setStep('recovery')
+      void getCurrentWindow().close()
     } catch (e) {
       setError(String(e))
-    } finally {
       setBusy(false)
     }
-  }
-
-  const finish = () => {
-    void getCurrentWindow().close()
-  }
-
-  if (step === 'recovery') {
-    return (
-      <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-8">
-        <div>
-          <h1 className="text-2xl font-semibold">Save your recovery code</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This is the only time it’s shown. Store it somewhere safe — it’s the
-            only way back in if you forget your PIN.
-          </p>
-        </div>
-
-        <RecoveryCodeDisplay code={recovery} />
-
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-          Heads up: if you enter the wrong PIN too many times, Veil locks your
-          Mac to the macOS login screen. You only set this up once.
-        </div>
-
-        <button
-          type="button"
-          onClick={finish}
-          className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          I’ve saved it — finish
-        </button>
-      </div>
-    )
   }
 
   return (
@@ -101,7 +62,7 @@ export function FirstRunView() {
             setPin(e.target.value.replace(/\D/g, ''))
           }}
           placeholder="New PIN"
-          className="rounded-md border border-input bg-transparent px-3 py-2 text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
+          className="rounded-md border border-input bg-transparent px-3 py-2 text-center text-lg tracking-widest focus:ring-2 focus:ring-ring focus:outline-none"
         />
         <input
           type="password"
@@ -112,11 +73,16 @@ export function FirstRunView() {
             setConfirm(e.target.value.replace(/\D/g, ''))
           }}
           onKeyDown={e => {
-            if (e.key === 'Enter') void submitPin()
+            if (e.key === 'Enter') void submit()
           }}
           placeholder="Confirm PIN"
-          className="rounded-md border border-input bg-transparent px-3 py-2 text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
+          className="rounded-md border border-input bg-transparent px-3 py-2 text-center text-lg tracking-widest focus:ring-2 focus:ring-ring focus:outline-none"
         />
+      </div>
+
+      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        If you enter the wrong PIN too many times, Veil locks your Mac to the
+        macOS login screen — that’s also how you recover if you forget your PIN.
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -124,10 +90,10 @@ export function FirstRunView() {
       <button
         type="button"
         disabled={busy}
-        onClick={() => void submitPin()}
+        onClick={() => void submit()}
         className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
-        Continue
+        Set PIN
       </button>
     </div>
   )

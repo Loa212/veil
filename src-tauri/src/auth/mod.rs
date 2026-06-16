@@ -1,4 +1,6 @@
-//! Authentication orchestration: Touch ID first, then PIN, then recovery code.
+//! Authentication: Touch ID, then PIN. There is no recovery code — if the PIN
+//! is forgotten, the macOS lock screen is the fallback (fail auth → macOS lock →
+//! log into the Mac → change the PIN in Settings).
 
 pub mod pin;
 mod touchid;
@@ -26,46 +28,10 @@ pub fn set_pin(pin: &str) -> Result<(), String> {
     crate::keychain::store_pin_hash(&hash)
 }
 
-/// Generate, store (hashed), and return a fresh recovery code (shown once).
-pub fn set_new_recovery() -> Result<String, String> {
-    let code = crate::recovery::generate();
-    let hash = pin::hash_secret(&normalize_recovery(&code))?;
-    crate::keychain::store_recovery_hash(&hash)?;
-    Ok(code)
-}
-
 /// Verify a PIN against the Keychain-stored hash.
 pub fn verify_pin(pin: &str) -> bool {
     match crate::keychain::read_pin_hash() {
         Ok(Some(hash)) => pin::verify_secret(pin, &hash),
         _ => false,
-    }
-}
-
-/// Verify a recovery code against the Keychain-stored hash.
-pub fn verify_recovery(code: &str) -> bool {
-    match crate::keychain::read_recovery_hash() {
-        Ok(Some(hash)) => pin::verify_secret(&normalize_recovery(code), &hash),
-        _ => false,
-    }
-}
-
-/// Normalize a recovery code for comparison: uppercase, strip spaces/dashes.
-pub fn normalize_recovery(code: &str) -> String {
-    code.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .collect::<String>()
-        .to_uppercase()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recovery_normalization() {
-        assert_eq!(normalize_recovery("abcd-efgh"), "ABCDEFGH");
-        assert_eq!(normalize_recovery("ABCD EFGH"), "ABCDEFGH");
-        assert_eq!(normalize_recovery("a1-b2"), "A1B2");
     }
 }
