@@ -1,8 +1,7 @@
-//! Menubar tray: arm / disarm / resume / status / settings / quit.
+//! Menubar tray: lock now / resume / status / settings / quit.
 //!
-//! The status line and the enabled/disabled state of arm/disarm/resume are
-//! kept in sync with the state machine via `refresh()`, called on every
-//! `state-changed`.
+//! The status line and the enabled state of "Lock now" / "Resume" are kept in
+//! sync with the state machine via `refresh()`, called on every `state-changed`.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
@@ -15,8 +14,7 @@ const TRAY_ID: &str = "veil-tray";
 
 pub struct TrayItems {
     pub status: MenuItem<tauri::Wry>,
-    pub arm: MenuItem<tauri::Wry>,
-    pub disarm: MenuItem<tauri::Wry>,
+    pub lock: MenuItem<tauri::Wry>,
     pub resume: MenuItem<tauri::Wry>,
 }
 
@@ -24,8 +22,7 @@ pub struct TrayItems {
 /// the caller can keep it alive (dropping it removes the icon).
 pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let status = MenuItem::with_id(app, "status", "Veil: Idle", false, None::<&str>)?;
-    let arm = MenuItem::with_id(app, "arm", "Arm", true, None::<&str>)?;
-    let disarm = MenuItem::with_id(app, "disarm", "Disarm", false, None::<&str>)?;
+    let lock = MenuItem::with_id(app, "lock", "Lock now", true, Some("Cmd+Ctrl+L"))?;
     let resume = MenuItem::with_id(app, "resume", "Resume", false, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
@@ -34,15 +31,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
     let menu = Menu::with_items(
         app,
-        &[
-            &status, &arm, &disarm, &resume, &sep1, &settings, &sep2, &quit,
-        ],
+        &[&status, &lock, &resume, &sep1, &settings, &sep2, &quit],
     )?;
 
     app.manage(TrayItems {
         status,
-        arm,
-        disarm,
+        lock,
         resume,
     });
 
@@ -60,9 +54,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
 fn on_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     match event.id().as_ref() {
-        "arm" => state::transition(app, State::Armed),
-        "disarm" => state::transition(app, State::Idle),
-        "resume" => state::transition(app, State::Armed),
+        "lock" => state::transition(app, State::Presenting),
+        // Resume is only enabled in Frozen, so a plain transition is safe.
+        "resume" if state::current(app) == State::Frozen => state::transition(app, State::Idle),
         "settings" => crate::commands::open_settings_window_impl(app),
         "quit" => app.exit(0),
         _ => {}
@@ -78,17 +72,14 @@ pub fn refresh(app: &AppHandle) {
     let state = state::current(app);
     let label = match state {
         State::Idle => "Veil: Idle",
-        State::Armed => "Veil: Armed",
-        State::Presenting => "Veil: Presenting",
+        State::Presenting => "Veil: Locked",
         State::Frozen => "Veil: Frozen",
     };
     let _ = items.status.set_text(label);
-    let _ = items.arm.set_enabled(state == State::Idle);
-    let _ = items.disarm.set_enabled(state != State::Idle);
+    // "Lock now" only makes sense from Idle; "Resume" only from Frozen.
+    let _ = items.lock.set_enabled(state == State::Idle);
     let _ = items.resume.set_enabled(state == State::Frozen);
 
-    // Reflect state in the hover tooltip so it's glanceable without opening the
-    // menu.
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_tooltip(Some(label));
     }

@@ -1,10 +1,10 @@
 //! Veil — a macOS soft lockscreen. This is the thin app entry point: it wires
-//! plugins, manages the state machine, builds the tray, installs the focus
-//! watcher, and registers the command surface. Business logic lives in modules.
+//! plugins, manages the state machine, builds the tray, registers the global
+//! lock hotkey, and registers the command surface. Business logic lives in
+//! modules.
 
 mod auth;
 mod commands;
-mod focus;
 mod keychain;
 mod lock;
 mod overlay;
@@ -17,8 +17,14 @@ mod tray;
 use std::sync::Mutex;
 
 use tauri::{Listener, Manager};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-use crate::state::AppState;
+use crate::state::{AppState, State};
+
+/// Global hotkey that raises the lock overlay from anywhere: Cmd+Ctrl+L.
+fn lock_shortcut() -> Shortcut {
+    Shortcut::new(Some(Modifiers::SUPER | Modifiers::CONTROL), Code::KeyL)
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -34,6 +40,15 @@ pub fn run() {
                 })
                 .build(),
         )
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, sc, event| {
+                    if event.state() == ShortcutState::Pressed && sc == &lock_shortcut() {
+                        state::transition(app, State::Presenting);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             // Menubar-only app: no Dock icon, no app-switcher entry. Must run
             // before we take an immutable handle, since it needs `&mut App`.
@@ -46,10 +61,14 @@ pub fn run() {
             let loaded = settings::load(&handle);
             app.manage(Mutex::new(AppState::new(loaded)));
 
-            // Tray + focus watcher.
+            // Register the global lock hotkey (Cmd+Ctrl+L).
+            if let Err(e) = app.global_shortcut().register(lock_shortcut()) {
+                log::error!("failed to register lock hotkey: {e}");
+            }
+
+            // Tray.
             let tray = tray::build(&handle)?;
             app.manage(tray);
-            focus::install(&handle);
 
             // Keep the tray in sync with the state machine.
             let h = handle.clone();
@@ -59,12 +78,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::arm,
-            commands::disarm,
+            commands::lock_now,
             commands::get_state,
             commands::resume,
-            commands::present_overlay,
-            commands::dismiss_overlay,
             commands::authenticate_touchid,
             commands::verify_pin,
             commands::verify_recovery,

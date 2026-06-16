@@ -1,5 +1,9 @@
 //! Core state machine. Every state transition flows through `transition()`,
 //! which validates the edge, runs side effects, and emits `state-changed`.
+//!
+//! Veil locks only on an explicit user action (menubar "Lock now" or the global
+//! hotkey). After a successful unlock it returns to `Idle` — it does NOT re-lock
+//! on focus loss. Hence there is no `Armed` state and no focus watcher.
 
 use std::sync::Mutex;
 
@@ -11,9 +15,12 @@ use crate::settings::Settings;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum State {
+    /// Not locked. The resting state.
     Idle,
-    Armed,
+    /// Overlay is up, awaiting auth.
     Presenting,
+    /// Auth failed/dismissed: the native lock was triggered and the overlay torn
+    /// down. Stays here until the user resumes.
     Frozen,
 }
 
@@ -23,8 +30,8 @@ pub enum State {
 /// synchronous and short, and no `.await` is ever held across the lock.
 pub struct AppState {
     pub state: State,
-    /// IOKit power-assertion id held while Armed (read once acquire/release
-    /// land in Phase 8).
+    /// IOKit power-assertion id held while the overlay is up (read once
+    /// acquire/release land in Phase 8).
     #[allow(dead_code)]
     pub power_assertion_id: Option<u32>,
     /// Labels of currently-spawned overlay windows.
@@ -46,25 +53,22 @@ impl AppState {
 /// Returns true if `from -> to` is a legal edge in the state machine.
 ///
 /// ```text
-/// Idle ──arm──► Armed ──focus loss──► Presenting
-///   ▲             │ ▲ auth ok            │
-///   │ disarm      │ └────────────────────┘
-///   │             │ auth fail/dismiss ──► Frozen ──resume──► Armed
+///        ┌──────┐  lock now / hotkey   ┌────────────┐
+///        │ Idle │ ───────────────────► │ Presenting │
+///        └──────┘ ◄─────────────────── └────────────┘
+///           ▲           auth ok          │ auth fail
+///           │ resume                      ▼
+///           │                         ┌────────┐
+///           └──────────────────────── │ Frozen │
+///                                      └────────┘
 /// ```
-/// `* -> Idle` is always legal (disarm / quit).
+/// `* -> Idle` is always legal (resume / disarm / quit).
 pub fn is_legal(from: State, to: State) -> bool {
     use State::*;
     if to == Idle {
         return true;
     }
-    matches!(
-        (from, to),
-        (Idle, Armed)
-            | (Armed, Presenting)
-            | (Presenting, Armed)
-            | (Presenting, Frozen)
-            | (Frozen, Armed)
-    )
+    matches!((from, to), (Idle, Presenting) | (Presenting, Frozen))
 }
 
 /// Read the current state.
@@ -100,18 +104,17 @@ pub fn transition(app: &AppHandle, to: State) {
     }
 }
 
-/// Side effects attached to specific edges. Filled in across later phases
-/// (overlay present/dismiss, power assertion, native lock).
+/// Side effects attached to specific edges.
 fn run_side_effects(app: &AppHandle, from: State, to: State) {
     use State::*;
     match (from, to) {
-        (Armed, Presenting) => crate::overlay::present(app),
-        (Presenting, Armed) | (Presenting, Frozen) => crate::overlay::dismiss(app),
+        // Lock now: raise the overlay.
+        (Idle, Presenting) => crate::overlay::present(app),
+        // Leaving Presenting (unlocked to Idle, or failed to Frozen): tear down.
+        (Presenting, Idle) | (Presenting, Frozen) => crate::overlay::dismiss(app),
         _ => {}
     }
-    // Power-assertion acquire/release (Phase 8) and native lock on -> Frozen
-    // (Phase 4) hook in here.
-    let _ = (from, to);
+    // Power-assertion acquire/release hooks in here (Phase 8).
 }
 
 #[cfg(test)]
@@ -121,13 +124,9 @@ mod tests {
     #[test]
     fn legal_edges() {
         use State::*;
-        assert!(is_legal(Idle, Armed));
-        assert!(is_legal(Armed, Presenting));
-        assert!(is_legal(Presenting, Armed));
+        assert!(is_legal(Idle, Presenting));
         assert!(is_legal(Presenting, Frozen));
-        assert!(is_legal(Frozen, Armed));
-        // disarm from anywhere
-        assert!(is_legal(Armed, Idle));
+        // unlock / resume / disarm: anything -> Idle
         assert!(is_legal(Presenting, Idle));
         assert!(is_legal(Frozen, Idle));
     }
@@ -135,9 +134,7 @@ mod tests {
     #[test]
     fn illegal_edges() {
         use State::*;
-        assert!(!is_legal(Idle, Presenting));
         assert!(!is_legal(Idle, Frozen));
-        assert!(!is_legal(Armed, Frozen));
         assert!(!is_legal(Frozen, Presenting));
     }
 }

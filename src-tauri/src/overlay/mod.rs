@@ -31,11 +31,15 @@ pub fn dismiss(app: &AppHandle) {
         let mut guard = state.lock().unwrap();
         std::mem::take(&mut guard.overlay_labels)
     };
+    log::info!("dismissing {} overlay window(s)", labels.len());
     for label in labels {
-        if let Some(win) = app.get_webview_window(&label) {
-            if let Err(e) = win.close() {
-                log::warn!("failed to close overlay {label}: {e}");
+        match app.get_webview_window(&label) {
+            Some(win) => {
+                if let Err(e) = win.close() {
+                    log::warn!("failed to close overlay {label}: {e}");
+                }
             }
+            None => log::warn!("overlay {label} not found at dismiss time"),
         }
     }
 }

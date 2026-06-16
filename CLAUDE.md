@@ -1,9 +1,11 @@
 # Veil
 
-A macOS "soft lockscreen": a menubar (accessory) app that drops a fullscreen
-overlay across every display the instant the app loses focus while _Armed_,
-prompts for Touch ID / PIN / recovery code, and falls back to the native macOS
-lock screen on failure. Tauri 2.x (Rust core) + React 19 + TS + Vite.
+A macOS "soft lockscreen": a menubar (accessory) app. On an explicit user action
+(menubar "Lock now" or the Cmd+Ctrl+L global hotkey) it drops a fullscreen
+overlay across every display and prompts for Touch ID / PIN / recovery code. On a
+successful unlock it returns to Idle (it does NOT re-lock on focus loss); on
+repeated auth failure it triggers the native macOS lock and freezes. Tauri 2.x
+(Rust core) + React 19 + TS + Vite. State machine: `Idle | Presenting | Frozen`.
 
 The build is structured in phases — see [PLAN.md](PLAN.md) for the spec and
 `~/.claude/plans/we-need-to-implement-eventual-lightning.md` for the
@@ -34,17 +36,17 @@ implementation plan and phase order.
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — app wiring: plugins, managed
   state, tray, focus watcher, command registration, `ActivationPolicy::Accessory`.
 - [src-tauri/src/state.rs](src-tauri/src/state.rs) — the state machine
-  (`Idle | Armed | Presenting | Frozen`); all transitions flow through
-  `transition()`.
+  (`Idle | Presenting | Frozen`); all transitions flow through `transition()`.
+  Lock is manual (no focus watcher): `Idle → Presenting` via "Lock now" / hotkey.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the entire Tauri
-  command surface.
+  command surface (`lock_now`, auth, settings, …).
 - [src-tauri/src/overlay/](src-tauri/src/overlay/) — multi-display overlay:
-  spawn one window per `NSScreen`, elevate each to screen-saver window level via
-  the raw `NSWindow` handle (`nswindow.rs`).
-- [src-tauri/src/focus.rs](src-tauri/src/focus.rs) — `NSApplicationDidResignActive`
-  watcher; arms the overlay on the `Armed → Presenting` edge only.
-- [src-tauri/src/auth/](src-tauri/src/auth/) — Touch ID (`touchid.rs`) + argon2
-  PIN/recovery hashing (`pin.rs`).
+  spawn one window per monitor at its logical geometry, elevate each to
+  screen-saver window level + activate the app via the raw `NSWindow` handle
+  (`nswindow.rs`) so all displays cover at once.
+- [src-tauri/src/auth/](src-tauri/src/auth/) — Touch ID (`touchid.rs`, dispatched
+  on the main thread) + argon2 PIN/recovery hashing (`pin.rs`). The global lock
+  hotkey is registered in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 - [src/main.tsx](src/main.tsx) — picks the view per window
   (overlay / settings / first-run) via [src/lib/window.ts](src/lib/window.ts).
 - [src/lib/commands.ts](src/lib/commands.ts) + [src/lib/ipc.ts](src/lib/ipc.ts)

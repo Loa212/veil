@@ -20,6 +20,7 @@
     "dialog:allow-open",
     "fs:default",
     "opener:default",
-    "log:default"
+    "log:default",
+    "global-shortcut:default"
   ]
 }

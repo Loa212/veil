@@ -9,14 +9,9 @@ import type { Settings } from '@/types/settings'
  */
 
 // ── State machine ──────────────────────────────────────────────────────────
-export const arm = () => invokeVoid('arm')
-export const disarm = () => invokeVoid('disarm')
+export const lockNow = () => invokeVoid('lock_now')
 export const getState = () => invoke<AppState>('get_state')
 export const resume = () => invokeVoid('resume')
-
-// ── Overlay (normally driven by the focus watcher; exposed for dev/testing) ──
-export const presentOverlay = () => invokeVoid('present_overlay')
-export const dismissOverlay = () => invokeVoid('dismiss_overlay')
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const authenticateTouchId = () =>

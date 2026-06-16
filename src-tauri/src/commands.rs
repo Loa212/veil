@@ -9,14 +9,10 @@ use crate::state::{self, State};
 
 // ── State machine ───────────────────────────────────────────────────────────
 
+/// Raise the lock overlay now (menubar "Lock now" / hotkey). Idle -> Presenting.
 #[tauri::command]
-pub fn arm(app: AppHandle) {
-    state::transition(&app, State::Armed);
-}
-
-#[tauri::command]
-pub fn disarm(app: AppHandle) {
-    state::transition(&app, State::Idle);
+pub fn lock_now(app: AppHandle) {
+    state::transition(&app, State::Presenting);
 }
 
 #[tauri::command]
@@ -24,24 +20,11 @@ pub fn get_state(app: AppHandle) -> State {
     state::current(&app)
 }
 
+/// Leave the Frozen state after a failed-auth lock. Frozen -> Idle.
 #[tauri::command]
 pub fn resume(app: AppHandle) {
     if state::current(&app) == State::Frozen {
-        state::transition(&app, State::Armed);
-    }
-}
-
-// ── Overlay (dev/testing; normal path is the focus watcher) ──────────────────
-
-#[tauri::command]
-pub fn present_overlay(app: AppHandle) {
-    state::transition(&app, State::Presenting);
-}
-
-#[tauri::command]
-pub fn dismiss_overlay(app: AppHandle) {
-    if state::current(&app) == State::Presenting {
-        state::transition(&app, State::Armed);
+        state::transition(&app, State::Idle);
     }
 }
 
@@ -49,7 +32,8 @@ pub fn dismiss_overlay(app: AppHandle) {
 
 #[tauri::command]
 pub fn authenticate_touchid(app: AppHandle) -> AuthOutcome {
-    let outcome = crate::auth::authenticate("unlock Veil");
+    let outcome = crate::auth::authenticate(&app, "unlock Veil");
+    log::info!("touchid outcome: {outcome:?}");
     if matches!(outcome, AuthOutcome::Success) {
         unlock(&app);
     }
@@ -74,10 +58,12 @@ pub fn verify_recovery(app: AppHandle, code: String) -> bool {
     ok
 }
 
-/// Successful auth from the overlay: tear it down and return to Armed.
+/// Successful auth from the overlay: tear it down and go Idle (no re-arm).
 fn unlock(app: &AppHandle) {
-    if state::current(app) == State::Presenting {
-        state::transition(app, State::Armed);
+    let current = state::current(app);
+    log::info!("unlock requested (current state: {current:?})");
+    if current == State::Presenting {
+        state::transition(app, State::Idle);
     }
 }
 
