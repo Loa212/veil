@@ -96,6 +96,16 @@ pub fn run() {
             commands::set_launch_at_login,
             commands::open_settings_window,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Veil");
+        .build(tauri::generate_context!())
+        .expect("error while building Veil")
+        .run(|_app, event| {
+            // Menubar app: keep running in the tray when all windows close
+            // (e.g. after the overlay is dismissed on unlock). Explicit
+            // `app.exit(0)` from the tray Quit item still exits.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if code.is_none() {
+                    api.prevent_exit();
+                }
+            }
+        });
 }
