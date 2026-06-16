@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Minimal hardened-runtime entitlements for notarization.
+
+  Veil uses LocalAuthentication (Touch ID), the Keychain, IOKit power
+  assertions, a global hotkey, and the private SACLockScreenImmediate — none of
+  which require special entitlements under a Developer ID / hardened runtime.
+  This file exists so the notarized build runs with the hardened runtime; add
+  entries only if a future capability needs one.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

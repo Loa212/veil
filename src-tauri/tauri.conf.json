@@ -36,13 +36,13 @@
     ],
     "category": "Utility",
     "shortDescription": "A macOS soft lockscreen.",
-    "longDescription": "Veil drops a fullscreen overlay the instant the app loses focus, prompts for Touch ID or a custom PIN, and falls back to the native macOS lock screen.",
+    "longDescription": "Veil is a menubar soft lockscreen. On Lock now (or ⌘⌃L) it drops a fullscreen overlay across every display and prompts for Touch ID or a PIN; on repeated failure it falls back to the native macOS lock screen.",
     "copyright": "Copyright © 2026. All rights reserved.",
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "15.0",
       "signingIdentity": null,
-      "entitlements": null,
+      "entitlements": "entitlements.plist",
       "exceptionDomain": ""
     }
   }
