@@ -15,6 +15,8 @@ type Mode = 'pin' | 'recovery'
 interface AuthPromptProps {
   /** Only the primary display auto-fires Touch ID and shows the full prompt. */
   isPrimary: boolean
+  /** A digit that triggered the reveal, seeded as the first PIN entry. */
+  initialDigit?: string
 }
 
 /**
@@ -23,9 +25,13 @@ interface AuthPromptProps {
  * Too many failures (or recovery exhaustion) triggers the native lock + Frozen
  * via `auth_failed()`.
  */
-export function AuthPrompt({ isPrimary }: AuthPromptProps) {
+export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
   const [mode, setMode] = useState<Mode>('pin')
-  const [pin, setPin] = useState('')
+  const [pin, setPin] = useState(
+    initialDigit && initialDigit >= '0' && initialDigit <= '9'
+      ? initialDigit
+      : ''
+  )
   const [recovery, setRecovery] = useState('')
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
