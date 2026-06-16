@@ -1,12 +1,14 @@
 //! Enumerate displays and spawn one borderless overlay window per screen.
 //!
-//! We use Tauri's `available_monitors()` (which already returns physical
-//! position + size in the global coordinate space) rather than enumerating
-//! `NSScreen` ourselves — this sidesteps the Cocoa bottom-left coordinate
-//! conversion and the main-thread marker. Each window is positioned/sized in
-//! physical pixels, then elevated to screen-saver level via `super::nswindow`.
+//! `available_monitors()` reports each display's **physical** position + size in
+//! a global coordinate space. The `WebviewWindowBuilder` takes **logical**
+//! coordinates, so we convert per-monitor (`logical = physical / scale`) and
+//! build each window already at its final geometry — building at the wrong size
+//! and resizing afterwards leaves a stale small window on any display whose
+//! Space isn't currently focused. We then elevate to screen-saver level and
+//! activate the app so every overlay composites across Spaces at once.
 
-use tauri::{AppHandle, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, WebviewUrl, WebviewWindowBuilder};
 
 use super::nswindow;
 
@@ -25,20 +27,33 @@ pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
         .and_then(|m| m.name().cloned());
 
     let mut labels = Vec::with_capacity(monitors.len());
+    let mut first_window: Option<tauri::WebviewWindow> = None;
 
     for (i, monitor) in monitors.iter().enumerate() {
         let pos = *monitor.position();
         let size = *monitor.size();
+        let scale = monitor.scale_factor();
         let is_primary = match (&primary, monitor.name()) {
             (Some(p), Some(n)) => p == n,
             // Fall back to "first monitor is primary" when names are missing.
             _ => i == 0,
         };
 
-        let label = format!("overlay-{i}");
-        let url = format!(
-            "index.html?role=overlay&idx={i}&primary={is_primary}",
+        // Physical (global) -> logical, per-monitor.
+        let lx = pos.x as f64 / scale;
+        let ly = pos.y as f64 / scale;
+        let lw = size.width as f64 / scale;
+        let lh = size.height as f64 / scale;
+
+        log::info!(
+            "monitor {i} ({:?}): pos={:?} size={:?} scale={scale} -> logical {lx},{ly} {lw}x{lh} primary={is_primary}",
+            monitor.name(),
+            pos,
+            size,
         );
+
+        let label = format!("overlay-{i}");
+        let url = format!("index.html?role=overlay&idx={i}&primary={is_primary}");
 
         let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
             .title("")
@@ -48,22 +63,31 @@ pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
             .resizable(false)
             .skip_taskbar(true)
             .always_on_top(true)
+            // Build at the final geometry so the window never has a wrong-size
+            // state on an unfocused display's Space.
+            .position(lx, ly)
+            .inner_size(lw, lh)
             .focused(is_primary)
             .build()
             .map_err(|e| format!("build {label}: {e}"))?;
 
-        // Position/size in physical pixels to avoid logical/physical ambiguity
-        // across mixed-DPI displays.
-        window
-            .set_position(PhysicalPosition::new(pos.x, pos.y))
-            .map_err(|e| format!("set_position {label}: {e}"))?;
-        window
-            .set_size(PhysicalSize::new(size.width, size.height))
-            .map_err(|e| format!("set_size {label}: {e}"))?;
+        // Re-assert exact logical geometry (the builder can be nudged by the WM).
+        let _ = window.set_position(LogicalPosition::new(lx, ly));
+        let _ = window.set_size(LogicalSize::new(lw, lh));
 
         nswindow::elevate(&window)?;
+        let _ = window.show();
 
+        if first_window.is_none() {
+            first_window = Some(window);
+        }
         labels.push(label);
+    }
+
+    // Activate Veil once so its all-Spaces overlay windows paint on every
+    // display immediately rather than on first click of each display.
+    if let Some(w) = &first_window {
+        nswindow::activate_app(w)?;
     }
 
     log::info!("presented {} overlay window(s)", labels.len());

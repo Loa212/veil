@@ -17,9 +17,7 @@ const SCREEN_SAVER_LEVEL: isize = 1000;
 pub fn elevate(window: &tauri::WebviewWindow) -> Result<(), String> {
     use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
 
-    let ptr = window
-        .ns_window()
-        .map_err(|e| format!("ns_window: {e}"))? as usize;
+    let ptr = window.ns_window().map_err(|e| format!("ns_window: {e}"))? as usize;
     if ptr == 0 {
         return Err("ns_window pointer is null".into());
     }
@@ -37,11 +35,40 @@ pub fn elevate(window: &tauri::WebviewWindow) -> Result<(), String> {
                     | NSWindowCollectionBehavior::Stationary,
             );
             ns_window.setIgnoresMouseEvents(false);
+            // Force the window to the front even when Veil isn't the active app
+            // — otherwise an overlay on a display whose Space isn't focused
+            // won't paint until that display is clicked.
+            ns_window.orderFrontRegardless();
         })
         .map_err(|e| format!("run_on_main_thread: {e}"))
 }
 
+/// Activate Veil (ignoring other apps) so macOS lets its `CanJoinAllSpaces`
+/// overlay windows composite onto every display's current Space immediately —
+/// otherwise a window on a display whose Space isn't focused won't paint until
+/// that display is clicked. Run via any overlay window's main thread.
+#[cfg(target_os = "macos")]
+pub fn activate_app(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::MainThreadMarker;
+
+    window
+        .run_on_main_thread(|| {
+            // SAFETY: we are on the main thread inside this closure.
+            let mtm = unsafe { MainThreadMarker::new_unchecked() };
+            let app = NSApplication::sharedApplication(mtm);
+            #[allow(deprecated)]
+            app.activateIgnoringOtherApps(true);
+        })
+        .map_err(|e| format!("run_on_main_thread (activate): {e}"))
+}
+
 #[cfg(not(target_os = "macos"))]
 pub fn elevate(_window: &tauri::WebviewWindow) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn activate_app(_window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
