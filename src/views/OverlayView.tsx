@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { AuthPrompt } from '@/components/AuthPrompt'
+import { Clock } from '@/components/Clock'
 import { useAppState } from '@/hooks/useAppState'
+import { loadSettings } from '@/lib/commands'
+import { defaultSettings, type Settings } from '@/types/settings'
 
 interface OverlayViewProps {
   isPrimary: boolean
@@ -8,18 +12,23 @@ interface OverlayViewProps {
 }
 
 /**
- * Fullscreen lock-screen overlay. Any input on the primary display (key, mouse
- * move, or click) reveals the auth prompt (Touch ID auto-fires; PIN / recovery
- * fallback). Secondary displays only show the backdrop — auth lives on primary.
+ * Fullscreen lock-screen overlay: background image (or dark fallback) + clock,
+ * native-lock-screen styled. Any input on the primary display (key, mouse move,
+ * or click) reveals the auth prompt; secondary displays show only the backdrop.
  */
 export function OverlayView({ isPrimary, index }: OverlayViewProps) {
   useAppState()
   const [revealed, setRevealed] = useState(false)
-  // If the reveal was triggered by typing a digit, forward it so the first
-  // keystroke isn't lost.
   const [initialDigit, setInitialDigit] = useState<string | undefined>()
+  const [settings, setSettings] = useState<Settings>(defaultSettings)
 
-  // Reveal on any user input while still on the backdrop.
+  useEffect(() => {
+    loadSettings()
+      .then(setSettings)
+      .catch(() => undefined)
+  }, [])
+
+  // Reveal on any user input while still on the backdrop (primary only).
   useEffect(() => {
     if (!isPrimary || revealed) return
 
@@ -28,7 +37,6 @@ export function OverlayView({ isPrimary, index }: OverlayViewProps) {
       setRevealed(true)
     }
     const onKey = (e: KeyboardEvent) => {
-      // Ignore lone modifier presses.
       if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return
       reveal(e.key >= '0' && e.key <= '9' ? e.key : undefined)
     }
@@ -44,18 +52,34 @@ export function OverlayView({ isPrimary, index }: OverlayViewProps) {
     }
   }, [isPrimary, revealed])
 
+  const bgUrl = settings.background_image_path
+    ? convertFileSrc(settings.background_image_path)
+    : null
+
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-white select-none">
-      {revealed && isPrimary ? (
-        <AuthPrompt isPrimary={isPrimary} initialDigit={initialDigit} />
-      ) : (
-        <div className="text-center">
-          <p className="text-3xl font-light tracking-wide">Veil</p>
-          <p className="mt-3 text-sm text-white/40">
+    <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-neutral-950 text-white select-none">
+      {/* Background image + dark scrim for legibility. */}
+      {bgUrl && (
+        <img
+          src={bgUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      <div className="absolute inset-0 bg-black/40" />
+
+      {/* Foreground content. */}
+      <div className="relative flex flex-col items-center gap-16">
+        {settings.show_clock && <Clock />}
+
+        {revealed && isPrimary ? (
+          <AuthPrompt isPrimary={isPrimary} initialDigit={initialDigit} />
+        ) : (
+          <p className="text-sm text-white/40">
             {isPrimary ? 'press any key to unlock' : `display ${index}`}
           </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

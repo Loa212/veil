@@ -4,7 +4,7 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useAppState } from '@/hooks/useAppState'
 import { useSaveSettings, useSettings } from '@/hooks/useSettings'
-import { authenticateTouchId, changePin } from '@/lib/commands'
+import { authenticateTouchId, changePin, pickBackground } from '@/lib/commands'
 import type { Settings } from '@/types/settings'
 
 type Pane = 'general' | 'pin' | 'about'
@@ -192,9 +192,42 @@ function BehaviorSection({ settings }: { settings: Settings }) {
     save.mutate({ ...settings, ...patch })
   }
 
+  const chooseBackground = async () => {
+    const path = await pickBackground().catch(() => null)
+    if (path) update({ background_image_path: path })
+  }
+
   return (
     <Section title="Behavior">
       <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <span className="text-sm">Background image</span>
+            {settings.background_image_path && (
+              <p className="truncate text-xs text-muted-foreground">
+                {settings.background_image_path.split('/').pop()}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void chooseBackground()}
+            >
+              Choose…
+            </Button>
+            {settings.background_image_path && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => update({ background_image_path: null })}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
         <ToggleRow
           label="Show clock on the lock overlay"
           checked={settings.show_clock}

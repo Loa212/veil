@@ -144,9 +144,14 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn pick_background() -> Result<Option<String>, String> {
-    // Phase 7: dialog plugin file picker.
-    Ok(None)
+pub fn pick_background(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("Images", &["png", "jpg", "jpeg", "heic", "webp", "gif"])
+        .blocking_pick_file();
+    Ok(picked.map(|p| p.to_string()))
 }
 
 #[tauri::command]
