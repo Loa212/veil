@@ -33,6 +33,10 @@ const PIN_LENGTH = 4
 // dropping to the macOS lock.
 const MAX_ATTEMPTS = 5
 
+// Innocent keys are forgiven, but not infinitely: mashing the spacebar a bunch
+// isn't legit, so past this many forgiven presses we lock too.
+const MAX_FORGIVEN = 15
+
 // Keys that are innocent "wake/navigation" presses — ignored entirely so they
 // neither pollute the PIN nor count against the user.
 const FORGIVEN_KEYS = new Set([
@@ -77,6 +81,7 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
   const [busy, setBusy] = useState(false)
   const [attempts, setAttempts] = useState(0)
   const touchIdTried = useRef(false)
+  const forgivenCount = useRef(0)
 
   // Auto-fire Touch ID once on mount (primary display only). On success the
   // Rust side tears the overlay down; otherwise we fall through to the PIN pad.
@@ -129,7 +134,12 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
         onDelete()
         return
       }
-      if (FORGIVEN_KEYS.has(e.key)) return
+      if (FORGIVEN_KEYS.has(e.key)) {
+        // Forgiven, but capped: a few wake/nav presses are fine; mashing isn't.
+        forgivenCount.current += 1
+        if (forgivenCount.current > MAX_FORGIVEN) void fallbackToMacLock()
+        return
+      }
       // Single printable character (digit, letter, or symbol).
       if (e.key.length === 1) pushChar(e.key)
     }
