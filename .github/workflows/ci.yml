@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, test & build (macOS)
+    # Veil is macOS-only (Sequoia 15+). The macOS-14 runner is Apple Silicon.
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      # Full quality gate: typecheck, eslint, prettier, cargo fmt/clippy,
+      # vitest, cargo test. Mirrors `bun run check:all` locally.
+      - name: Quality gate (check:all)
+        run: bun run check:all
+
+      # Confirm the Tauri app compiles end to end. No bundling/signing here —
+      # that lives in the (deferred) release workflow once Apple creds exist.
+      - name: Build app (no bundle)
+        run: bun run tauri build --no-bundle

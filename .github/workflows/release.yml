@@ -1,0 +1,67 @@
+name: Release
+
+# DEFERRED STUB — not wired up yet. Signing & notarization need Apple Developer
+# credentials (Team ID, Developer ID Application cert, notarytool API key). Until
+# those exist as repo secrets, this workflow only builds an UNSIGNED .dmg.
+#
+# To activate signed/notarized releases later:
+#   1. Add repo secrets: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+#      APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
+#   2. Set `signingIdentity` / `providerShortName` in src-tauri/tauri.conf.json.
+#   3. Uncomment the env block in the build step below.
+#   4. (Optional) add a step to bump the Homebrew cask in a `homebrew-veil` tap.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (e.g. 0.1.0)
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build .dmg (macOS)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build app bundle
+        # TODO(signing): uncomment once Apple credentials are configured.
+        # env:
+        #   APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        #   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        #   APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        #   APPLE_ID: ${{ secrets.APPLE_ID }}
+        #   APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun run tauri build --bundles app,dmg
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veil-${{ github.event.inputs.version }}-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
