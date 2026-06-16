@@ -9,10 +9,17 @@ import '@/styles.css'
 
 const ctx = resolveWindowContext()
 
-// Overlay windows are transparent at the OS level — mark <html> so styles.css
-// keeps the document background clear while OverlayView paints its own.
 if (ctx.role === 'overlay') {
+  // Overlay windows are transparent at the OS level — mark <html> so styles.css
+  // keeps the document background clear while OverlayView paints its own.
   document.documentElement.classList.add('overlay')
+} else {
+  // Settings / first-run windows follow the system appearance.
+  const mql = window.matchMedia('(prefers-color-scheme: dark)')
+  const applyTheme = (dark: boolean) =>
+    document.documentElement.classList.toggle('dark', dark)
+  applyTheme(mql.matches)
+  mql.addEventListener('change', e => applyTheme(e.matches))
 }
 
 function Root() {
