@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { PinPad } from './PinPad'
 import {
   authFailed,
@@ -6,6 +7,26 @@ import {
   verifyPin,
   verifyRecovery,
 } from '@/lib/commands'
+
+/**
+ * Re-key the overlay window. The Touch ID system sheet steals key/focus and
+ * doesn't return it on dismiss, leaving the PIN keyboard listener dead — so we
+ * explicitly refocus after the biometric prompt resolves.
+ */
+async function refocusOverlay() {
+  try {
+    await getCurrentWindow().setFocus()
+  } catch {
+    /* not under Tauri (dev) */
+  }
+  window.focus()
+}
+
+/** Fire Touch ID and refocus the overlay afterwards (success closes it anyway). */
+async function tryTouchId() {
+  await authenticateTouchId().catch(() => undefined)
+  await refocusOverlay()
+}
 
 const PIN_LENGTH = 4
 const MAX_ATTEMPTS = 3
@@ -43,7 +64,7 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
   useEffect(() => {
     if (!isPrimary || touchIdTried.current) return
     touchIdTried.current = true
-    void authenticateTouchId().catch(() => undefined)
+    void tryTouchId()
   }, [isPrimary])
 
   const fail = useCallback(() => {
@@ -155,7 +176,7 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
         {isPrimary && (
           <button
             type="button"
-            onClick={() => void authenticateTouchId().catch(() => undefined)}
+            onClick={() => void tryTouchId()}
             className="hover:text-white/80"
           >
             Use Touch ID
