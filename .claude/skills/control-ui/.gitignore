@@ -1,0 +1,3 @@
+# Live session cookies + persistent browser profile — secrets, disposable.
+*.storageState.json
+profile/
