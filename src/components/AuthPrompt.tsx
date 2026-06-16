@@ -28,7 +28,32 @@ async function tryTouchId() {
 }
 
 const PIN_LENGTH = 4
-const MAX_ATTEMPTS = 3
+// Forgiving budget: legit users sometimes fumble (spamming Space to wake Touch
+// ID, a stray key while it's laggy), so we allow several wrong attempts before
+// dropping to the macOS lock.
+const MAX_ATTEMPTS = 5
+
+// Keys that are innocent "wake/navigation" presses — ignored entirely so they
+// neither pollute the PIN nor count against the user.
+const FORGIVEN_KEYS = new Set([
+  ' ',
+  'Enter',
+  'Escape',
+  'Tab',
+  'Shift',
+  'Control',
+  'Alt',
+  'Meta',
+  'CapsLock',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+])
 
 interface AuthPromptProps {
   /** Only the primary display auto-fires Touch ID and shows the full prompt. */
@@ -77,12 +102,14 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
     [attempts]
   )
 
-  const onDigit = useCallback(
-    (d: string) => {
+  // Append a character to the PIN buffer (digits from the pad, or any typed key
+  // that isn't forgiven — non-digits naturally produce a wrong PIN and fail).
+  const pushChar = useCallback(
+    (c: string) => {
       if (busy) return
       setError(false)
       setPin(prev => {
-        const next = (prev + d).slice(0, PIN_LENGTH)
+        const next = (prev + c).slice(0, PIN_LENGTH)
         if (next.length === PIN_LENGTH) void submitPin(next)
         return next
       })
@@ -92,15 +119,23 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
 
   const onDelete = useCallback(() => setPin(prev => prev.slice(0, -1)), [])
 
-  // Physical-keyboard support for the PIN pad.
+  // Physical-keyboard handling. Digits enter the PIN; Backspace deletes;
+  // innocent wake/navigation keys are ignored; anything else (letters, symbols —
+  // e.g. blind-typing behind the overlay) lands in the PIN, so it fails into the
+  // macOS lock after the forgiving attempt budget.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key >= '0' && e.key <= '9') onDigit(e.key)
-      else if (e.key === 'Backspace') onDelete()
+      if (e.key === 'Backspace') {
+        onDelete()
+        return
+      }
+      if (FORGIVEN_KEYS.has(e.key)) return
+      // Single printable character (digit, letter, or symbol).
+      if (e.key.length === 1) pushChar(e.key)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onDigit, onDelete])
+  }, [pushChar, onDelete])
 
   return (
     <div className="flex flex-col items-center gap-7">
@@ -109,7 +144,7 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
         maxLength={PIN_LENGTH}
         disabled={busy}
         error={error}
-        onDigit={onDigit}
+        onDigit={pushChar}
         onDelete={onDelete}
       />
       <div className="flex flex-col items-center gap-2 text-xs text-white/50">
