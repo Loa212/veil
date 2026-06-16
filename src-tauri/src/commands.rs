@@ -133,6 +133,10 @@ pub fn load_settings(app: AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&app, &settings)?;
+    // Apply the login-item toggle to match the saved setting.
+    if let Err(e) = apply_launch_at_login(&app, settings.launch_at_login) {
+        log::warn!("failed to apply launch-at-login: {e}");
+    }
     let mutex = app.state::<std::sync::Mutex<state::AppState>>();
     mutex.lock().unwrap().settings = settings;
     let _ = app.emit("settings-updated", ());
@@ -146,9 +150,20 @@ pub fn pick_background() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub fn set_launch_at_login(_enabled: bool) -> Result<(), String> {
-    // Phase 8.
-    Err("not implemented".into())
+pub fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
+    apply_launch_at_login(&app, enabled)
+}
+
+/// Sync the macOS login item to `enabled`. Shared so `save_settings` can apply
+/// the toggle too.
+pub fn apply_launch_at_login(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let mgr = app.autolaunch();
+    if enabled {
+        mgr.enable().map_err(|e| format!("enable autostart: {e}"))
+    } else {
+        mgr.disable().map_err(|e| format!("disable autostart: {e}"))
+    }
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────────

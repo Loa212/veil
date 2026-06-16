@@ -30,9 +30,8 @@ pub enum State {
 /// synchronous and short, and no `.await` is ever held across the lock.
 pub struct AppState {
     pub state: State,
-    /// IOKit power-assertion id held while the overlay is up (read once
-    /// acquire/release land in Phase 8).
-    #[allow(dead_code)]
+    /// IOKit power-assertion id held while the overlay is up (prevents idle
+    /// sleep when `prevent_sleep` is enabled).
     pub power_assertion_id: Option<u32>,
     /// Labels of currently-spawned overlay windows.
     pub overlay_labels: Vec<String>,
@@ -108,17 +107,46 @@ pub fn transition(app: &AppHandle, to: State) {
 fn run_side_effects(app: &AppHandle, from: State, to: State) {
     use State::*;
     match (from, to) {
-        // Lock now: raise the overlay.
-        (Idle, Presenting) => crate::overlay::present(app),
-        // Unlocked: tear the overlay down.
-        (Presenting, Idle) => crate::overlay::dismiss(app),
+        // Lock now: raise the overlay + (optionally) prevent idle sleep.
+        (Idle, Presenting) => {
+            crate::overlay::present(app);
+            acquire_power(app);
+        }
+        // Unlocked: tear the overlay down + release the sleep assertion.
+        (Presenting, Idle) => {
+            crate::overlay::dismiss(app);
+            release_power(app);
+        }
         // Failed auth -> Frozen: the native lock (SACLockScreenImmediate) is
         // already firing; KEEP our overlay up so the system lock covers it with
-        // no desktop flash. It's dismissed once we return to Idle on unlock.
+        // no desktop flash. Release our assertion (the OS lock owns sleep now).
+        (Presenting, Frozen) => release_power(app),
+        // Returned to Idle after macOS unlock: tear the overlay down.
         (Frozen, Idle) => crate::overlay::dismiss(app),
         _ => {}
     }
-    // Power-assertion acquire/release hooks in here (Phase 8).
+}
+
+/// Acquire an idle-sleep assertion if `prevent_sleep` is enabled.
+fn acquire_power(app: &AppHandle) {
+    let managed = app.state::<Mutex<AppState>>();
+    let mut guard = managed.lock().unwrap();
+    if !guard.settings.prevent_sleep || guard.power_assertion_id.is_some() {
+        return;
+    }
+    match crate::power::acquire() {
+        Ok(id) => guard.power_assertion_id = Some(id),
+        Err(e) => log::warn!("prevent-sleep assertion failed: {e}"),
+    }
+}
+
+/// Release the idle-sleep assertion if one is held.
+fn release_power(app: &AppHandle) {
+    let managed = app.state::<Mutex<AppState>>();
+    let id = managed.lock().unwrap().power_assertion_id.take();
+    if let Some(id) = id {
+        crate::power::release(id);
+    }
 }
 
 #[cfg(test)]

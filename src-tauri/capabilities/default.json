@@ -21,6 +21,10 @@
     "fs:default",
     "opener:default",
     "log:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "autostart:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }
