@@ -34,7 +34,8 @@ implementation plan and phase order.
 ## Entry points
 
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — app wiring: plugins, managed
-  state, tray, focus watcher, command registration, `ActivationPolicy::Accessory`.
+  state, tray, global lock hotkey, first-run gate, command registration,
+  `ActivationPolicy::Accessory`, `prevent_exit` so it lives in the tray.
 - [src-tauri/src/state.rs](src-tauri/src/state.rs) — the state machine
   (`Idle | Presenting | Frozen`); all transitions flow through `transition()`.
   Lock is manual (no focus watcher): `Idle → Presenting` via "Lock now" / hotkey.

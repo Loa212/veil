@@ -15,20 +15,38 @@ pub enum AuthOutcome {
     Unavailable,
 }
 
-/// Verify a PIN against the stored hash. Phase 4 uses a hardcoded test hash;
-/// Phase 5 repoints `stored_pin_hash()` at the Keychain.
+/// Whether a PIN has been configured (a Keychain pin-hash item exists).
+pub fn is_pin_configured() -> bool {
+    matches!(crate::keychain::read_pin_hash(), Ok(Some(_)))
+}
+
+/// Store a new PIN (hashed). Used by first-run setup and PIN change.
+pub fn set_pin(pin: &str) -> Result<(), String> {
+    let hash = pin::hash_secret(pin)?;
+    crate::keychain::store_pin_hash(&hash)
+}
+
+/// Generate, store (hashed), and return a fresh recovery code (shown once).
+pub fn set_new_recovery() -> Result<String, String> {
+    let code = crate::recovery::generate();
+    let hash = pin::hash_secret(&normalize_recovery(&code))?;
+    crate::keychain::store_recovery_hash(&hash)?;
+    Ok(code)
+}
+
+/// Verify a PIN against the Keychain-stored hash.
 pub fn verify_pin(pin: &str) -> bool {
-    match stored_pin_hash() {
-        Some(hash) => pin::verify_secret(pin, &hash),
-        None => false,
+    match crate::keychain::read_pin_hash() {
+        Ok(Some(hash)) => pin::verify_secret(pin, &hash),
+        _ => false,
     }
 }
 
-/// Verify a recovery code against the stored hash.
+/// Verify a recovery code against the Keychain-stored hash.
 pub fn verify_recovery(code: &str) -> bool {
-    match stored_recovery_hash() {
-        Some(hash) => pin::verify_secret(&normalize_recovery(code), &hash),
-        None => false,
+    match crate::keychain::read_recovery_hash() {
+        Ok(Some(hash)) => pin::verify_secret(&normalize_recovery(code), &hash),
+        _ => false,
     }
 }
 
@@ -39,24 +57,6 @@ pub fn normalize_recovery(code: &str) -> String {
         .collect::<String>()
         .to_uppercase()
 }
-
-// ── Temporary credential store (Phase 4) ─────────────────────────────────────
-// Phase 5 replaces these with Keychain reads. The test PIN is "1234" and the
-// test recovery code is "ABCD-EFGH-JKLM-NPQR" (normalized "ABCDEFGHJKLMNPQR").
-// These hashes were generated once with auth::pin::hash_secret.
-
-fn stored_pin_hash() -> Option<String> {
-    Some(TEST_PIN_HASH.to_string())
-}
-
-fn stored_recovery_hash() -> Option<String> {
-    Some(TEST_RECOVERY_HASH.to_string())
-}
-
-const TEST_PIN_HASH: &str =
-    "$argon2id$v=19$m=19456,t=2,p=1$8V6Im3pLZ7lE6KP3SSRPsw$2JFi7JYTbfIARpwwduFn60AM3XQmuPrLT9+BfKwI0pI";
-const TEST_RECOVERY_HASH: &str =
-    "$argon2id$v=19$m=19456,t=2,p=1$04QeTK+gHeRQF/hleF+zsQ$VoLGLsvlFMpLHaIegYLY/iFUiGZA2dkNszx+qAOHsF8";
 
 #[cfg(test)]
 mod tests {

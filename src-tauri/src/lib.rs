@@ -20,7 +20,7 @@ use std::sync::Mutex;
 use tauri::{Listener, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-use crate::state::{AppState, State};
+use crate::state::AppState;
 
 /// Global hotkey that raises the lock overlay from anywhere: Cmd+Ctrl+L.
 fn lock_shortcut() -> Shortcut {
@@ -45,7 +45,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, sc, event| {
                     if event.state() == ShortcutState::Pressed && sc == &lock_shortcut() {
-                        state::transition(app, State::Presenting);
+                        commands::request_lock(app);
                     }
                 })
                 .build(),
@@ -78,6 +78,11 @@ pub fn run() {
             let h = handle.clone();
             app.listen("state-changed", move |_| tray::refresh(&h));
             tray::refresh(&handle);
+
+            // First run: no PIN yet → open the setup window.
+            if !auth::is_pin_configured() {
+                commands::open_first_run_window(&handle);
+            }
 
             Ok(())
         })

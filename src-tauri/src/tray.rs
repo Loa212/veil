@@ -54,7 +54,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
 fn on_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     match event.id().as_ref() {
-        "lock" => state::transition(app, State::Presenting),
+        "lock" => crate::commands::request_lock(app),
         // Resume is only enabled in Frozen, so a plain transition is safe.
         "resume" if state::current(app) == State::Frozen => state::transition(app, State::Idle),
         "settings" => crate::commands::open_settings_window_impl(app),

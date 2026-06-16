@@ -12,7 +12,19 @@ use crate::state::{self, State};
 /// Raise the lock overlay now (menubar "Lock now" / hotkey). Idle -> Presenting.
 #[tauri::command]
 pub fn lock_now(app: AppHandle) {
-    state::transition(&app, State::Presenting);
+    request_lock(&app);
+}
+
+/// Shared lock entry point for the command, tray, and hotkey. Refuses to lock
+/// until a PIN is configured (otherwise there'd be no way to unlock); instead it
+/// surfaces the first-run setup.
+pub fn request_lock(app: &AppHandle) {
+    if !crate::auth::is_pin_configured() {
+        log::warn!("lock requested before PIN setup → opening first-run");
+        open_first_run_window(app);
+        return;
+    }
+    state::transition(app, State::Presenting);
 }
 
 #[tauri::command]
@@ -80,32 +92,45 @@ pub fn auth_failed(app: AppHandle) {
 
 #[tauri::command]
 pub fn is_pin_configured() -> bool {
-    // Phase 5: check the Keychain.
-    false
+    crate::auth::is_pin_configured()
 }
 
+/// First-run: store the chosen PIN (hashed) in the Keychain.
 #[tauri::command]
-pub fn setup_pin(_pin: String) -> Result<(), String> {
-    // Phase 5.
-    Err("not implemented".into())
+pub fn setup_pin(pin: String) -> Result<(), String> {
+    validate_pin(&pin)?;
+    crate::auth::set_pin(&pin)
 }
 
+/// Settings: change the PIN (requires the current PIN to authorize).
 #[tauri::command]
-pub fn change_pin(_current_pin: String, _new_pin: String) -> Result<bool, String> {
-    // Phase 5/7.
-    Err("not implemented".into())
+pub fn change_pin(current_pin: String, new_pin: String) -> Result<bool, String> {
+    if !crate::auth::verify_pin(&current_pin) {
+        return Ok(false);
+    }
+    validate_pin(&new_pin)?;
+    crate::auth::set_pin(&new_pin)?;
+    Ok(true)
 }
 
+/// First-run: generate, store (hashed), and return a fresh recovery code (shown
+/// once). Same impl as `regenerate_recovery` — kept distinct for call-site clarity.
 #[tauri::command]
 pub fn generate_recovery() -> Result<String, String> {
-    // Phase 5.
-    Err("not implemented".into())
+    crate::auth::set_new_recovery()
 }
 
+/// Settings: regenerate the recovery code, replacing the old one.
 #[tauri::command]
 pub fn regenerate_recovery() -> Result<String, String> {
-    // Phase 7.
-    Err("not implemented".into())
+    crate::auth::set_new_recovery()
+}
+
+fn validate_pin(pin: &str) -> Result<(), String> {
+    if pin.len() < 4 || !pin.chars().all(|c| c.is_ascii_digit()) {
+        return Err("PIN must be at least 4 digits".into());
+    }
+    Ok(())
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -158,5 +183,24 @@ pub fn open_settings_window_impl(app: &AppHandle) {
         .build();
     if let Err(e) = result {
         log::error!("failed to open settings window: {e}");
+    }
+}
+
+/// Open the first-run setup window (no PIN configured yet). Closing it after a
+/// successful setup is the frontend's job.
+pub fn open_first_run_window(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("first-run") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let result = WebviewWindowBuilder::new(app, "first-run", WebviewUrl::App("index.html".into()))
+        .title("Welcome to Veil")
+        .inner_size(560.0, 680.0)
+        .resizable(false)
+        .center()
+        .build();
+    if let Err(e) = result {
+        log::error!("failed to open first-run window: {e}");
     }
 }
