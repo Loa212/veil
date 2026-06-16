@@ -48,20 +48,37 @@ pub fn dismiss_overlay(app: AppHandle) {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn authenticate_touchid() -> AuthOutcome {
-    crate::auth::authenticate("unlock Veil")
+pub fn authenticate_touchid(app: AppHandle) -> AuthOutcome {
+    let outcome = crate::auth::authenticate("unlock Veil");
+    if matches!(outcome, AuthOutcome::Success) {
+        unlock(&app);
+    }
+    outcome
 }
 
 #[tauri::command]
-pub fn verify_pin(_pin: String) -> bool {
-    // Phase 4/5: compare against the Keychain-stored hash, transition on success.
-    false
+pub fn verify_pin(app: AppHandle, pin: String) -> bool {
+    let ok = crate::auth::verify_pin(&pin);
+    if ok {
+        unlock(&app);
+    }
+    ok
 }
 
 #[tauri::command]
-pub fn verify_recovery(_code: String) -> bool {
-    // Phase 4/5.
-    false
+pub fn verify_recovery(app: AppHandle, code: String) -> bool {
+    let ok = crate::auth::verify_recovery(&code);
+    if ok {
+        unlock(&app);
+    }
+    ok
+}
+
+/// Successful auth from the overlay: tear it down and return to Armed.
+fn unlock(app: &AppHandle) {
+    if state::current(app) == State::Presenting {
+        state::transition(app, State::Armed);
+    }
 }
 
 #[tauri::command]

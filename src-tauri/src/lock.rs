@@ -1,14 +1,28 @@
 //! Native macOS lock fallback.
 //!
-//! Uses the Cmd+Ctrl+Q keystroke trick via `osascript`, which locks the screen
-//! regardless of the "require password after sleep" setting (chosen over
-//! `pmset displaysleepnow`, which only locks when that setting is enabled).
+//! Sends the Cmd+Ctrl+Q lock-screen keystroke via `osascript` / System Events.
+//! Unlike `pmset displaysleepnow`, this locks the session regardless of the
+//! "require password after sleep" setting.
 //!
-//! Phase 1 stub; Phase 4 invokes osascript.
+//! Note: sending synthetic keystrokes requires Accessibility permission for
+//! Veil (System Settings → Privacy & Security → Accessibility). The first
+//! attempt will prompt for it.
+
+use std::process::Command;
+
+const LOCK_SCRIPT: &str =
+    r#"tell application "System Events" to keystroke "q" using {command down, control down}"#;
 
 pub fn lock_screen() -> Result<(), String> {
-    // Phase 4:
-    //   osascript -e 'tell application "System Events" to keystroke "q"
-    //                 using {command down, control down}'
-    Err("lock not implemented yet".into())
+    let status = Command::new("osascript")
+        .args(["-e", LOCK_SCRIPT])
+        .status()
+        .map_err(|e| format!("failed to run osascript: {e}"))?;
+
+    if status.success() {
+        log::info!("native lock triggered");
+        Ok(())
+    } else {
+        Err(format!("osascript exited with {status}"))
+    }
 }

@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useState } from 'react'
+import { AuthPrompt } from '@/components/AuthPrompt'
 import { useAppState } from '@/hooks/useAppState'
-import { dismissOverlay } from '@/lib/commands'
 
 interface OverlayViewProps {
   isPrimary: boolean
@@ -8,39 +8,37 @@ interface OverlayViewProps {
 }
 
 /**
- * Fullscreen lock-screen overlay.
- *
- * Phase 3: opaque full-bleed surface that proves the window covers the whole
- * display (menu bar + Dock included). Until auth lands in Phase 4, any click or
- * Escape dismisses the overlay (Presenting -> Armed) so it isn't a dead end.
+ * Fullscreen lock-screen overlay. The first interaction on the primary display
+ * reveals the auth prompt (Touch ID auto-fires; PIN / recovery fallback).
+ * Secondary displays only show the backdrop — auth lives on the primary.
  */
 export function OverlayView({ isPrimary, index }: OverlayViewProps) {
   useAppState()
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') void dismissOverlay()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  const [revealed, setRevealed] = useState(false)
 
   return (
-    <button
-      type="button"
-      onClick={() => void dismissOverlay()}
-      className="flex h-screen w-screen cursor-default items-center justify-center bg-neutral-950 text-center text-white select-none"
-    >
-      <div>
-        <p className="text-3xl font-light tracking-wide">Veil</p>
-        <p className="mt-3 text-sm text-white/40">
-          display {index}
-          {isPrimary ? ' · primary' : ''}
-        </p>
-        <p className="mt-8 text-xs text-white/30">
-          click or press Esc to dismiss (auth lands in Phase 4)
-        </p>
-      </div>
-    </button>
+    <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-white select-none">
+      {revealed && isPrimary ? (
+        <AuthPrompt isPrimary={isPrimary} />
+      ) : isPrimary ? (
+        // Click-anywhere surface to reveal the prompt. A full-bleed button keeps
+        // it keyboard-accessible without wrapping the (button-containing) prompt.
+        <button
+          type="button"
+          onClick={() => setRevealed(true)}
+          className="flex h-full w-full items-center justify-center text-center"
+        >
+          <div>
+            <p className="text-3xl font-light tracking-wide">Veil</p>
+            <p className="mt-3 text-sm text-white/40">click to unlock</p>
+          </div>
+        </button>
+      ) : (
+        <div className="text-center">
+          <p className="text-3xl font-light tracking-wide">Veil</p>
+          <p className="mt-3 text-sm text-white/40">display {index}</p>
+        </div>
+      )}
+    </div>
   )
 }
