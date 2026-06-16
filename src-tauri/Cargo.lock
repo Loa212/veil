@@ -4648,6 +4648,7 @@ dependencies = [
  "argon2",
  "block2",
  "dirs 5.0.1",
+ "libc",
  "log",
  "objc2",
  "objc2-app-kit",
