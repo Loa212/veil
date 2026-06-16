@@ -167,7 +167,8 @@ pub fn open_settings_window_impl(app: &AppHandle) {
     }
     let result = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
         .title("Veil — Settings")
-        .inner_size(560.0, 640.0)
+        .inner_size(720.0, 560.0)
+        .min_inner_size(640.0, 480.0)
         .resizable(true)
         .center()
         .build();

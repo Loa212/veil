@@ -1,22 +1,91 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import { useAppState } from '@/hooks/useAppState'
 import { useSaveSettings, useSettings } from '@/hooks/useSettings'
 import { authenticateTouchId, changePin } from '@/lib/commands'
 import type { Settings } from '@/types/settings'
 
+type Pane = 'general' | 'pin' | 'about'
+
+const NAV: { id: Pane; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'pin', label: 'PIN' },
+  { id: 'about', label: 'About' },
+]
+
 export function SettingsView() {
   useAppState()
   const { data: settings } = useSettings()
+  const [pane, setPane] = useState<Pane>('general')
 
   return (
-    <div className="mx-auto max-w-lg space-y-10 p-8">
-      <h1 className="text-2xl font-semibold">Veil — Settings</h1>
-      <ChangePinSection />
-      {settings && <BehaviorSection settings={settings} />}
-      <HotkeySection />
+    <div className="flex h-screen">
+      {/* Left nav */}
+      <nav className="w-44 shrink-0 border-r border-border bg-muted/30 p-3">
+        <p className="px-2 pt-1 pb-3 text-sm font-semibold">Veil</p>
+        <ul className="space-y-1">
+          {NAV.map(item => (
+            <li key={item.id}>
+              <button
+                type="button"
+                onClick={() => setPane(item.id)}
+                className={cn(
+                  'w-full rounded-md px-3 py-1.5 text-left text-sm transition-colors',
+                  pane === item.id
+                    ? 'bg-primary/10 font-medium text-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                )}
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* Content pane */}
+      <div className="flex-1 overflow-y-auto p-8">
+        {pane === 'general' && (
+          <div className="max-w-lg space-y-10">
+            {settings && <BehaviorSection settings={settings} />}
+            <HotkeySection />
+          </div>
+        )}
+        {pane === 'pin' && (
+          <div className="max-w-lg">
+            <ChangePinSection />
+          </div>
+        )}
+        {pane === 'about' && (
+          <div className="max-w-lg">
+            <AboutSection />
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+function AboutSection() {
+  return (
+    <Section title="About Veil">
+      <div className="space-y-3 text-sm text-muted-foreground">
+        <p>
+          Veil is a soft lockscreen. Press{' '}
+          <kbd className="rounded border border-input bg-muted px-1.5 py-0.5 font-mono text-xs">
+            ⌘⌃L
+          </kbd>{' '}
+          or use the menubar to drop a fullscreen overlay; unlock with Touch ID
+          or your PIN.
+        </p>
+        <p>
+          If you forget your PIN, fail the unlock — Veil drops to the macOS lock
+          screen. Log back into your Mac, then change your PIN here.
+        </p>
+      </div>
+    </Section>
   )
 }
 
