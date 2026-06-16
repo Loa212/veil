@@ -10,6 +10,9 @@ use tauri::{AppHandle, Manager};
 
 use crate::state::{self, State};
 
+/// Stable id used to look the tray up from `refresh()` (for tooltip updates).
+const TRAY_ID: &str = "veil-tray";
+
 pub struct TrayItems {
     pub status: MenuItem<tauri::Wry>,
     pub arm: MenuItem<tauri::Wry>,
@@ -43,7 +46,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
         resume,
     });
 
-    let tray = TrayIconBuilder::with_id("veil-tray")
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(app.default_window_icon().unwrap().clone())
         .icon_as_template(true)
         .tooltip("Veil")
@@ -83,4 +86,10 @@ pub fn refresh(app: &AppHandle) {
     let _ = items.arm.set_enabled(state == State::Idle);
     let _ = items.disarm.set_enabled(state != State::Idle);
     let _ = items.resume.set_enabled(state == State::Frozen);
+
+    // Reflect state in the hover tooltip so it's glanceable without opening the
+    // menu.
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(label));
+    }
 }
