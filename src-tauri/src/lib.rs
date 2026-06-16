@@ -10,6 +10,7 @@ mod lock;
 mod overlay;
 mod power;
 mod recovery;
+mod screen;
 mod settings;
 mod state;
 mod tray;
@@ -65,6 +66,9 @@ pub fn run() {
             if let Err(e) = app.global_shortcut().register(lock_shortcut()) {
                 log::error!("failed to register lock hotkey: {e}");
             }
+
+            // Auto-clear Frozen once macOS is unlocked again.
+            screen::install(&handle);
 
             // Tray.
             let tray = tray::build(&handle)?;

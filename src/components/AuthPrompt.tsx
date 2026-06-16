@@ -128,7 +128,9 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
 
   if (mode === 'recovery') {
     return (
-      <div className="flex flex-col items-center gap-5">
+      <div
+        className={`flex flex-col items-center gap-5 ${error ? 'veil-shake' : ''}`}
+      >
         <p className="text-sm text-white/70">Enter your recovery code</p>
         <input
           autoFocus
@@ -143,7 +145,7 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
           }}
           placeholder="XXXX-XXXX-XXXX-XXXX"
           className={`w-72 rounded-md border bg-white/5 px-4 py-2 text-center font-mono tracking-widest text-white placeholder:text-white/30 focus:outline-none ${
-            error ? 'border-red-400' : 'border-white/30'
+            error ? 'border-red-500 text-red-300' : 'border-white/30'
           }`}
         />
         <div className="flex gap-4 text-xs text-white/50">

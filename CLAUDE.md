@@ -47,6 +47,11 @@ implementation plan and phase order.
 - [src-tauri/src/auth/](src-tauri/src/auth/) — Touch ID (`touchid.rs`, dispatched
   on the main thread) + argon2 PIN/recovery hashing (`pin.rs`). The global lock
   hotkey is registered in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
+- [src-tauri/src/lock.rs](src-tauri/src/lock.rs) — native lock via the private
+  `SACLockScreenImmediate` (login.framework, dlopen/dlsym) — no permission.
+- [src-tauri/src/screen.rs](src-tauri/src/screen.rs) — observes
+  `com.apple.screenIsUnlocked` to auto-clear `Frozen → Idle` after the user logs
+  back into macOS.
 - [src/main.tsx](src/main.tsx) — picks the view per window
   (overlay / settings / first-run) via [src/lib/window.ts](src/lib/window.ts).
 - [src/lib/commands.ts](src/lib/commands.ts) + [src/lib/ipc.ts](src/lib/ipc.ts)

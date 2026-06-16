@@ -110,8 +110,12 @@ fn run_side_effects(app: &AppHandle, from: State, to: State) {
     match (from, to) {
         // Lock now: raise the overlay.
         (Idle, Presenting) => crate::overlay::present(app),
-        // Leaving Presenting (unlocked to Idle, or failed to Frozen): tear down.
-        (Presenting, Idle) | (Presenting, Frozen) => crate::overlay::dismiss(app),
+        // Unlocked: tear the overlay down.
+        (Presenting, Idle) => crate::overlay::dismiss(app),
+        // Failed auth -> Frozen: the native lock (SACLockScreenImmediate) is
+        // already firing; KEEP our overlay up so the system lock covers it with
+        // no desktop flash. It's dismissed once we return to Idle on unlock.
+        (Frozen, Idle) => crate::overlay::dismiss(app),
         _ => {}
     }
     // Power-assertion acquire/release hooks in here (Phase 8).

@@ -10,7 +10,10 @@ interface PinPadProps {
   onDelete: () => void
 }
 
+// Fixed keypad layout: '' is the empty bottom-left cell, 'del' the backspace.
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
+
+const DOTS = Array.from({ length: 8 }, (_, i) => `dot-${i}`)
 
 /** macOS-lock-screen-style numeric PIN pad with a dot indicator. */
 export function PinPad({
@@ -22,15 +25,18 @@ export function PinPad({
   onDelete,
 }: PinPadProps) {
   return (
-    <div className="flex flex-col items-center gap-7">
-      <div className={cn('flex gap-3', error && 'animate-pulse')}>
-        {Array.from({ length: maxLength }).map((_, i) => (
+    <div
+      className={cn('flex flex-col items-center gap-7', error && 'veil-shake')}
+    >
+      <div className="flex gap-3">
+        {DOTS.slice(0, maxLength).map((id, i) => (
           <span
-            key={i}
+            key={id}
             className={cn(
-              'h-3 w-3 rounded-full border border-white/50 transition-colors',
-              i < length && 'bg-white',
-              error && 'border-red-400'
+              'h-3 w-3 rounded-full border transition-colors',
+              error
+                ? 'border-red-500 bg-red-500'
+                : cn('border-white/50', i < length && 'bg-white')
             )}
           />
         ))}
@@ -38,11 +44,12 @@ export function PinPad({
 
       <div className="grid grid-cols-3 gap-4">
         {KEYS.map((key, i) => {
-          if (key === '') return <span key={i} />
+          const cellId = `cell-${i}`
+          if (key === '') return <span key={cellId} />
           if (key === 'del') {
             return (
               <button
-                key={i}
+                key={cellId}
                 type="button"
                 disabled={disabled || length === 0}
                 onClick={onDelete}
@@ -54,7 +61,7 @@ export function PinPad({
           }
           return (
             <button
-              key={i}
+              key={cellId}
               type="button"
               disabled={disabled || length >= maxLength}
               onClick={() => onDigit(key)}

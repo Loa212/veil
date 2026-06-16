@@ -88,3 +88,27 @@ html.overlay,
 html.overlay body {
   background-color: transparent;
 }
+
+/* Wrong-PIN feedback: a quick horizontal shake. */
+@keyframes veil-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-10px);
+  }
+  40% {
+    transform: translateX(9px);
+  }
+  60% {
+    transform: translateX(-6px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.veil-shake {
+  animation: veil-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
