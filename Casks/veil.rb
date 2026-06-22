@@ -17,9 +17,18 @@ cask "veil" do
 
   # Veil is Apple-silicon only for now and needs macOS 15+.
   depends_on arch: :arm64
-  depends_on macos: ">= :sequoia"
+  depends_on macos: :sequoia
 
   app "Veil.app"
+
+  # Veil isn't notarized yet, so macOS quarantines the unsigned app and shows
+  # "Veil is damaged and can't be opened". Strip the quarantine flag on install
+  # so it launches normally. (Remove this once the app is notarized.)
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Veil.app"],
+                   sudo: false
+  end
 
   # Clean up the app-support + login item on uninstall.
   zap trash: [
