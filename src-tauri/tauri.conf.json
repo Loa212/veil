@@ -31,7 +31,7 @@
       "endpoints": [
         "https://github.com/Loa212/veil/releases/latest/download/latest.json"
       ],
-      "pubkey": "REPLACE_WITH_TAURI_SIGNER_PUBLIC_KEY"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM3QzVBRDA5OTdENzI2MUMKUldRY0p0ZVhDYTNGeHgrSC9CcmM4SzlUVmxlc2h0MmwzNTdIRUc2T0JWby92MnJXYXdoN0ZkakwK"
     }
   },
   "bundle": {
