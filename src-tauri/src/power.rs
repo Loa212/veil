@@ -1,9 +1,10 @@
-//! IOKit power assertion to prevent system idle sleep while the overlay is up.
+//! IOKit power assertion to prevent system idle sleep during a Veil lock session.
 //!
 //! Hand-rolled FFI to IOKit's `IOPMAssertionCreateWithName` /
 //! `IOPMAssertionRelease`. We hold a `PreventUserIdleSystemSleep` assertion
-//! while presenting (so the Mac doesn't doze with the overlay showing) and
-//! release it on unlock. Gated on the `prevent_sleep` setting.
+//! while presenting or in the native-lock fallback (so background work keeps
+//! running until the user returns) and release it on unlock. Gated on the
+//! `prevent_sleep` setting.
 
 #![allow(dead_code)]
 

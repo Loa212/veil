@@ -65,18 +65,26 @@ pub fn verify_pin(app: AppHandle, pin: String) -> bool {
 fn unlock(app: &AppHandle) {
     let current = state::current(app);
     log::info!("unlock requested (current state: {current:?})");
-    if current == State::Presenting {
+    // Frozen normally clears through the macOS screen-unlock notification, but
+    // that distributed notification is not guaranteed. Accepting auth here is
+    // the recovery path that ensures a missed notification cannot strand an
+    // overlay above the desktop.
+    if matches!(current, State::Presenting | State::Frozen) {
         state::transition(app, State::Idle);
     }
 }
 
 #[tauri::command]
-pub fn auth_failed(app: AppHandle) {
-    // Phase 4: trigger the native lock, then freeze.
-    if let Err(e) = crate::lock::lock_screen() {
-        log::error!("native lock failed: {e}");
-    }
+pub fn auth_failed(app: AppHandle) -> Result<(), String> {
+    // Only freeze after the native lock was actually raised. Freezing on an API
+    // failure disables normal overlay auth and used to create an unrecoverable
+    // lock screen.
+    crate::lock::lock_screen().map_err(|e| {
+        log::error!("native lock failed; keeping overlay auth active: {e}");
+        e
+    })?;
     state::transition(&app, State::Frozen);
+    Ok(())
 }
 
 // ── PIN setup ─────────────────────────────────────────────────────────────────
@@ -139,6 +147,7 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     }
     let mutex = app.state::<std::sync::Mutex<state::AppState>>();
     mutex.lock().unwrap().settings = settings;
+    state::sync_power(&app);
     let _ = app.emit("settings-updated", ());
     Ok(())
 }
@@ -213,5 +222,23 @@ pub fn open_first_run_window(app: &AppHandle) {
         .build();
     if let Err(e) = result {
         log::error!("failed to open first-run window: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_pin;
+
+    #[test]
+    fn accepts_supported_pin_lengths() {
+        assert!(validate_pin("1234").is_ok());
+        assert!(validate_pin("123456").is_ok());
+        assert!(validate_pin("12345678901234567890").is_ok());
+    }
+
+    #[test]
+    fn rejects_unsupported_or_non_numeric_pins() {
+        assert!(validate_pin("123").is_err());
+        assert!(validate_pin("12a4").is_err());
     }
 }

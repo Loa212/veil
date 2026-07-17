@@ -27,7 +27,7 @@ async function tryTouchId() {
   await refocusOverlay()
 }
 
-const PIN_LENGTH = 4
+const PIN_MIN_LENGTH = 4
 // Forgiving budget: legit users sometimes fumble (spamming Space to wake Touch
 // ID, a stray key while it's laggy), so we allow several wrong attempts before
 // dropping to the macOS lock.
@@ -41,7 +41,6 @@ const MAX_FORGIVEN = 15
 // neither pollute the PIN nor count against the user.
 const FORGIVEN_KEYS = new Set([
   ' ',
-  'Enter',
   'Escape',
   'Tab',
   'Shift',
@@ -79,7 +78,9 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
   )
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [attempts, setAttempts] = useState(0)
+  const pinRef = useRef(pin)
+  const busyRef = useRef(false)
+  const attempts = useRef(0)
   const touchIdTried = useRef(false)
   const forgivenCount = useRef(0)
 
@@ -91,38 +92,43 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
     void tryTouchId()
   }, [isPrimary])
 
-  const submitPin = useCallback(
-    async (value: string) => {
-      setBusy(true)
-      const ok = await verifyPin(value).catch(() => false)
-      setBusy(false)
-      if (ok) return // overlay closes via state-changed
-      const next = attempts + 1
-      setAttempts(next)
-      setError(true)
-      setPin('')
-      if (next >= MAX_ATTEMPTS) void fallbackToMacLock()
-      else setTimeout(() => setError(false), 600)
-    },
-    [attempts]
-  )
+  const submitPin = useCallback(async (value: string) => {
+    if (value.length < PIN_MIN_LENGTH || busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    const ok = await verifyPin(value).catch(() => false)
+    busyRef.current = false
+    setBusy(false)
+    if (ok) return // overlay closes via state-changed
+    attempts.current += 1
+    setError(true)
+    pinRef.current = ''
+    setPin('')
+    if (attempts.current >= MAX_ATTEMPTS) {
+      void fallbackToMacLock().catch(() => undefined)
+    } else setTimeout(() => setError(false), 600)
+  }, [])
 
   // Append a character to the PIN buffer (digits from the pad, or any typed key
   // that isn't forgiven — non-digits naturally produce a wrong PIN and fail).
-  const pushChar = useCallback(
-    (c: string) => {
-      if (busy) return
-      setError(false)
-      setPin(prev => {
-        const next = (prev + c).slice(0, PIN_LENGTH)
-        if (next.length === PIN_LENGTH) void submitPin(next)
-        return next
-      })
-    },
-    [busy, submitPin]
-  )
+  const pushChar = useCallback((c: string) => {
+    if (busyRef.current) return
+    setError(false)
+    const next = pinRef.current + c
+    pinRef.current = next
+    setPin(next)
+  }, [])
 
-  const onDelete = useCallback(() => setPin(prev => prev.slice(0, -1)), [])
+  const onDelete = useCallback(() => {
+    if (busyRef.current) return
+    const next = pinRef.current.slice(0, -1)
+    pinRef.current = next
+    setPin(next)
+  }, [])
+
+  const onSubmit = useCallback(() => {
+    void submitPin(pinRef.current)
+  }, [submitPin])
 
   // Physical-keyboard handling. Digits enter the PIN; Backspace deletes;
   // innocent wake/navigation keys are ignored; anything else (letters, symbols —
@@ -134,10 +140,16 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
         onDelete()
         return
       }
+      if (e.key === 'Enter') {
+        onSubmit()
+        return
+      }
       if (FORGIVEN_KEYS.has(e.key)) {
         // Forgiven, but capped: a few wake/nav presses are fine; mashing isn't.
         forgivenCount.current += 1
-        if (forgivenCount.current > MAX_FORGIVEN) void fallbackToMacLock()
+        if (forgivenCount.current > MAX_FORGIVEN) {
+          void fallbackToMacLock().catch(() => undefined)
+        }
         return
       }
       // Single printable character (digit, letter, or symbol).
@@ -145,17 +157,18 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pushChar, onDelete])
+  }, [pushChar, onDelete, onSubmit])
 
   return (
     <div className="flex flex-col items-center gap-7">
       <PinPad
         length={pin.length}
-        maxLength={PIN_LENGTH}
+        minLength={PIN_MIN_LENGTH}
         disabled={busy}
         error={error}
         onDigit={pushChar}
         onDelete={onDelete}
+        onSubmit={onSubmit}
       />
       <div className="flex flex-col items-center gap-2 text-xs text-white/50">
         {isPrimary && (
@@ -169,7 +182,7 @@ export function AuthPrompt({ isPrimary, initialDigit }: AuthPromptProps) {
         )}
         <button
           type="button"
-          onClick={() => void fallbackToMacLock()}
+          onClick={() => void fallbackToMacLock().catch(() => undefined)}
           className="hover:text-white/80"
         >
           macOS lock screen

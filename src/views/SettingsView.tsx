@@ -8,6 +8,7 @@ import { authenticateTouchId, changePin, pickBackground } from '@/lib/commands'
 import type { Settings } from '@/types/settings'
 
 type Pane = 'general' | 'pin' | 'about'
+const PIN_MIN = 4
 
 const NAV: { id: Pane; label: string }[] = [
   { id: 'general', label: 'General' },
@@ -106,8 +107,8 @@ function ChangePinSection() {
 
   const submit = async (touchIdOk: boolean) => {
     setStatus(null)
-    if (newPin.length < 4 || !/^\d+$/.test(newPin)) {
-      setStatus('New PIN must be at least 4 digits.')
+    if (newPin.length < PIN_MIN || !/^\d+$/.test(newPin)) {
+      setStatus(`New PIN must be at least ${PIN_MIN} digits.`)
       return
     }
     if (newPin !== confirm) {

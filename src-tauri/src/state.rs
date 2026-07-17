@@ -30,8 +30,8 @@ pub enum State {
 /// synchronous and short, and no `.await` is ever held across the lock.
 pub struct AppState {
     pub state: State,
-    /// IOKit power-assertion id held while the overlay is up (prevents idle
-    /// sleep when `prevent_sleep` is enabled).
+    /// IOKit power-assertion id held for the entire Veil lock session (including
+    /// the native-lock fallback) when `prevent_sleep` is enabled.
     pub power_assertion_id: Option<u32>,
     /// Labels of currently-spawned overlay windows.
     pub overlay_labels: Vec<String>,
@@ -96,7 +96,21 @@ pub fn transition(app: &AppHandle, to: State) {
     };
 
     log::info!("state: {from:?} -> {to:?}");
-    run_side_effects(app, from, to);
+    if let Err(e) = run_side_effects(app, from, to) {
+        log::error!("state transition {from:?} -> {to:?} failed: {e}");
+
+        // Overlay presentation is the only fallible transition side effect. It
+        // is all-or-nothing: return to the previous state and defensively remove
+        // any window that may have been created before the failure.
+        let mut guard = managed.lock().unwrap();
+        if guard.state == to {
+            guard.state = from;
+        }
+        drop(guard);
+        crate::overlay::dismiss(app);
+        sync_power(app);
+        return;
+    }
 
     if let Err(e) = app.emit("state-changed", to) {
         log::error!("failed to emit state-changed: {e}");
@@ -104,48 +118,56 @@ pub fn transition(app: &AppHandle, to: State) {
 }
 
 /// Side effects attached to specific edges.
-fn run_side_effects(app: &AppHandle, from: State, to: State) {
+fn run_side_effects(app: &AppHandle, from: State, to: State) -> Result<(), String> {
     use State::*;
     match (from, to) {
         // Lock now: raise the overlay + (optionally) prevent idle sleep.
         (Idle, Presenting) => {
-            crate::overlay::present(app);
-            acquire_power(app);
+            crate::overlay::present(app)?;
         }
-        // Unlocked: tear the overlay down + release the sleep assertion.
+        // Unlocked: tear the overlay down. Power policy is synchronized below.
         (Presenting, Idle) => {
             crate::overlay::dismiss(app);
-            release_power(app);
         }
         // Failed auth -> Frozen: the native lock (SACLockScreenImmediate) is
         // already firing; KEEP our overlay up so the system lock covers it with
-        // no desktop flash. Release our assertion (the OS lock owns sleep now).
-        (Presenting, Frozen) => release_power(app),
+        // no desktop flash. Keep preventing system sleep: this is still the same
+        // Veil lock session, and background workflows must remain alive.
+        (Presenting, Frozen) => {}
         // Returned to Idle after macOS unlock: tear the overlay down.
         (Frozen, Idle) => crate::overlay::dismiss(app),
         _ => {}
     }
+
+    sync_power(app);
+    Ok(())
 }
 
-/// Acquire an idle-sleep assertion if `prevent_sleep` is enabled.
-fn acquire_power(app: &AppHandle) {
+/// Whether the configured power assertion should be held in a given state.
+fn should_prevent_sleep(state: State, enabled: bool) -> bool {
+    enabled && state != State::Idle
+}
+
+/// Make the IOKit assertion match current settings and lock state. This is also
+/// called after settings changes so toggling the option takes effect immediately.
+pub(crate) fn sync_power(app: &AppHandle) {
     let managed = app.state::<Mutex<AppState>>();
     let mut guard = managed.lock().unwrap();
-    if !guard.settings.prevent_sleep || guard.power_assertion_id.is_some() {
-        return;
-    }
-    match crate::power::acquire() {
-        Ok(id) => guard.power_assertion_id = Some(id),
-        Err(e) => log::warn!("prevent-sleep assertion failed: {e}"),
-    }
-}
-
-/// Release the idle-sleep assertion if one is held.
-fn release_power(app: &AppHandle) {
-    let managed = app.state::<Mutex<AppState>>();
-    let id = managed.lock().unwrap().power_assertion_id.take();
-    if let Some(id) = id {
-        crate::power::release(id);
+    let should_hold = should_prevent_sleep(guard.state, guard.settings.prevent_sleep);
+    match (should_hold, guard.power_assertion_id) {
+        (true, None) => match crate::power::acquire() {
+            Ok(id) => {
+                log::info!("prevent-sleep assertion acquired ({id})");
+                guard.power_assertion_id = Some(id);
+            }
+            Err(e) => log::warn!("prevent-sleep assertion failed: {e}"),
+        },
+        (false, Some(id)) => {
+            guard.power_assertion_id = None;
+            crate::power::release(id);
+            log::info!("prevent-sleep assertion released ({id})");
+        }
+        _ => {}
     }
 }
 
@@ -168,5 +190,15 @@ mod tests {
         use State::*;
         assert!(!is_legal(Idle, Frozen));
         assert!(!is_legal(Frozen, Presenting));
+    }
+
+    #[test]
+    fn prevents_sleep_for_the_entire_lock_session() {
+        use State::*;
+        assert!(!should_prevent_sleep(Idle, true));
+        assert!(should_prevent_sleep(Presenting, true));
+        assert!(should_prevent_sleep(Frozen, true));
+        assert!(!should_prevent_sleep(Presenting, false));
+        assert!(!should_prevent_sleep(Frozen, false));
     }
 }

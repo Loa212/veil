@@ -12,6 +12,20 @@ use tauri::{AppHandle, LogicalPosition, LogicalSize, WebviewUrl, WebviewWindowBu
 
 use super::nswindow;
 
+/// Hide and destroy windows created by an incomplete presentation. Hiding first
+/// is the safety-critical operation: it guarantees the user is not trapped even
+/// if native teardown reports an error.
+fn rollback(windows: &[tauri::WebviewWindow]) {
+    for window in windows.iter().rev() {
+        if let Err(e) = window.hide() {
+            log::warn!("failed to hide partial overlay {}: {e}", window.label());
+        }
+        if let Err(e) = window.destroy() {
+            log::error!("failed to destroy partial overlay {}: {e}", window.label());
+        }
+    }
+}
+
 /// Spawn an overlay window on every display. Returns the labels of the windows
 /// created (so the manager can tear them down later).
 pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
@@ -28,6 +42,7 @@ pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
 
     let mut labels = Vec::with_capacity(monitors.len());
     let mut first_window: Option<tauri::WebviewWindow> = None;
+    let mut created = Vec::with_capacity(monitors.len());
 
     for (i, monitor) in monitors.iter().enumerate() {
         let pos = *monitor.position();
@@ -55,7 +70,7 @@ pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
         let label = format!("overlay-{i}");
         let url = format!("index.html?role=overlay&idx={i}&primary={is_primary}");
 
-        let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+        let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
             .title("")
             .decorations(false)
             .transparent(true)
@@ -69,13 +84,23 @@ pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
             .inner_size(lw, lh)
             .focused(is_primary)
             .build()
-            .map_err(|e| format!("build {label}: {e}"))?;
+        {
+            Ok(window) => window,
+            Err(e) => {
+                rollback(&created);
+                return Err(format!("build {label}: {e}"));
+            }
+        };
+        created.push(window.clone());
 
         // Re-assert exact logical geometry (the builder can be nudged by the WM).
         let _ = window.set_position(LogicalPosition::new(lx, ly));
         let _ = window.set_size(LogicalSize::new(lw, lh));
 
-        nswindow::elevate(&window)?;
+        if let Err(e) = nswindow::elevate(&window) {
+            rollback(&created);
+            return Err(format!("elevate {label}: {e}"));
+        }
         let _ = window.show();
 
         if first_window.is_none() {
@@ -87,7 +112,10 @@ pub fn spawn_all(app: &AppHandle) -> Result<Vec<String>, String> {
     // Activate Veil once so its all-Spaces overlay windows paint on every
     // display immediately rather than on first click of each display.
     if let Some(w) = &first_window {
-        nswindow::activate_app(w)?;
+        if let Err(e) = nswindow::activate_app(w) {
+            rollback(&created);
+            return Err(format!("activate overlays: {e}"));
+        }
     }
 
     log::info!("presented {} overlay window(s)", labels.len());
