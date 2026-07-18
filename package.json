@@ -1,7 +1,7 @@
 {
   "name": "veil",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Veil — a macOS soft lockscreen that drops a fullscreen overlay the instant the app loses focus.",
   "license": "MIT",
