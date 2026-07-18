@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getVersion } from '@tauri-apps/api/app'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useAppState } from '@/hooks/useAppState'
 import { useSaveSettings, useSettings } from '@/hooks/useSettings'
-import { authenticateTouchId, changePin, pickBackground } from '@/lib/commands'
+import {
+  authenticateTouchId,
+  changePin,
+  checkForUpdates,
+  pickBackground,
+} from '@/lib/commands'
 import type { Settings } from '@/types/settings'
 
 type Pane = 'general' | 'pin' | 'about'
@@ -70,9 +76,33 @@ export function SettingsView() {
 }
 
 function AboutSection() {
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null))
+  }, [])
+
   return (
     <Section title="About Veil">
-      <div className="space-y-3 text-sm text-muted-foreground">
+      <div className="space-y-5 text-sm text-muted-foreground">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="font-medium text-foreground">Veil</p>
+            <p className="font-mono text-xs">
+              {version ? `Version ${version}` : 'Version unavailable'}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void checkForUpdates()}
+          >
+            Check for updates
+          </Button>
+        </div>
+
         <p>
           Veil is a soft lockscreen. Press{' '}
           <kbd className="rounded border border-input bg-muted px-1.5 py-0.5 font-mono text-xs">

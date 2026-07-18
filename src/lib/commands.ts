@@ -39,3 +39,6 @@ export const setLaunchAtLogin = (enabled: boolean) =>
 
 // ── Windows ──────────────────────────────────────────────────────────────────
 export const openSettingsWindow = () => invokeVoid('open_settings_window')
+
+// ── Updates ──────────────────────────────────────────────────────────────────
+export const checkForUpdates = () => invokeVoid('check_for_updates')

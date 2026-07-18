@@ -111,6 +111,7 @@ pub fn run() {
             commands::pick_background,
             commands::set_launch_at_login,
             commands::open_settings_window,
+            commands::check_for_updates,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Veil")

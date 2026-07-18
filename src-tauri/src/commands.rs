@@ -187,6 +187,13 @@ pub fn open_settings_window(app: AppHandle) {
     open_settings_window_impl(&app);
 }
 
+/// Manually check for updates from the Settings window (non-silent, so the user
+/// always gets a result dialog).
+#[tauri::command]
+pub fn check_for_updates(app: AppHandle) {
+    crate::update::check(&app, false);
+}
+
 /// Shared impl so the tray can open settings without going through IPC.
 pub fn open_settings_window_impl(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("settings") {

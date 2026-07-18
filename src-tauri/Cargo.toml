@@ -1,6 +1,6 @@
 [package]
 name = "veil"
-version = "0.1.1"
+version = "0.1.2"
 description = "Veil — a macOS soft lockscreen overlay."
 authors = ["loa212"]
 edition = "2021"
